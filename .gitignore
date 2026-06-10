@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.env
+.venv/
+.DS_Store
+
+# Se quiser versionar o histórico local, remova as duas linhas abaixo.
+data/consolidados/*.xlsx
+data/historico_consolidados.json
