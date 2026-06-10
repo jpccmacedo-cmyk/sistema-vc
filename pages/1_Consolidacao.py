@@ -52,3 +52,6 @@ resultados = processar_multiplas_datas(
     data_referencia,
     copiar_estilos=copiar_estilos
 )
+salvar_resultados_no_historico(resultados)
+
+st.success("Consolidado(s) salvo(s) no histórico do dashboard.")
