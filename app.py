@@ -1,7 +1,7 @@
 import streamlit as st
 
 st.set_page_config(
-    page_title="Sistema Excel CN",
+    page_title="Sistema Performance Operacional Regional CN",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
