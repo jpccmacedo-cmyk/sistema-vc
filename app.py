@@ -75,8 +75,8 @@ with col1:
     <div class="card">
         <div class="pill">Etapa 1</div>
         <h3>📁 Consolidação</h3>
-        <p>Use esta página para gerar os consolidados. Quando o arquivo for criado, ele deve ser salvo no histórico.</p>
-        <p><b>Saída esperada:</b> Excel consolidado com abas COB, CUI, EDE, NOB, PVE, SOB e XAM.</p>
+        <p>Use esta página para gerar os consolidados.</p>
+        <p>Quando o arquivo for criado, ele será salvo no histórico do dashboard.</p>
     </div>
     """, unsafe_allow_html=True)
     st.page_link("pages/1_Consolidacao.py", label="Abrir Consolidação", icon="📁")
@@ -86,8 +86,8 @@ with col2:
     <div class="card">
         <div class="pill">Etapa 2</div>
         <h3>📊 Dashboard</h3>
-        <p>O dashboard lê automaticamente os consolidados salvos e extrai indicadores das células mapeadas.</p>
-        <p><b>Inclui:</b> filtros, tabela, comparativo por planta e histórico.</p>
+        <p>O dashboard lê automaticamente os consolidados salvos.</p>
+        <p>Ele extrai os indicadores das células mapeadas por planta.</p>
     </div>
     """, unsafe_allow_html=True)
     st.page_link("pages/2_Dashboard_Consolidado.py", label="Abrir Dashboard", icon="📊")
@@ -97,13 +97,15 @@ with col3:
     <div class="card">
         <div class="pill">Histórico</div>
         <h3>🕘 Histórico automático</h3>
-        <p>Todos os consolidados registrados ficam em <code>data/consolidados</code> e são listados no dashboard.</p>
-        <p><b>Observação:</b> em nuvem, use armazenamento persistente externo no futuro.</p>
+        <p>Os consolidados ficam salvos na pasta <code>data/consolidados</code>.</p>
+        <p>O dashboard monta a visão histórica a partir desses arquivos.</p>
     </div>
     """, unsafe_allow_html=True)
 
 st.divider()
+
 st.subheader("🚀 Fluxo de uso")
+
 st.markdown("""
 <div class="step"><b>1.</b> Acesse a página <b>Consolidação</b>.</div>
 <div class="step"><b>2.</b> Gere ou registre um arquivo consolidado.</div>
