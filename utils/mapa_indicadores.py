@@ -1,8 +1,19 @@
 import pandas as pd
 
-MAPA_RESULTADOS = {
-    "COB": {
-       ": "G143",        "Fornos": {
+
+def base_padrao():
+    return {
+        "Fornos": {
+            "OEE": "K19",
+            "FP": "G19",
+            "FF": "E19",
+            "MTBF": "I19",
+            "%ST": "C34",
+            "CT": "E34",
+        },
+        "Moagens Cru": {
+            "OEE": "K143",
+            "FP": "G143",
             "FF": "E143",
             "MTBF": "I143",
         },
@@ -17,7 +28,7 @@ MAPA_RESULTADOS = {
             "OEE": "K263",
         },
         "Britagens": {
-            "OEE": "K206",
+            "OEE": "K215",
         },
         "Estoques": {
             "Clínquer": "E41",
@@ -29,8 +40,50 @@ MAPA_RESULTADOS = {
             "Cimento": "C98",
             "Clínquer": "C19",
         },
-    },
+    }
+
+
+MAPA_RESULTADOS = {
+    "COB": base_padrao(),
+    "CUI": base_padrao(),
+    "EDE": base_padrao(),
+    "NOB": base_padrao(),
+    "PVE": base_padrao(),
+    "SOB": base_padrao(),
+    "XAM": base_padrao(),
 }
+
+# Ajustes específicos por planta
+
+MAPA_RESULTADOS["COB"]["Moagens Cru"] = {
+    "OEE": "K144",
+    "FP": "G144",
+    "FF": "E144",
+    "MTBF": "I144",
+}
+MAPA_RESULTADOS["COB"]["Moagens Cimento"]["%KKC"] = "F113"
+MAPA_RESULTADOS["COB"]["Ensacadeiras"]["OEE"] = "K264"
+MAPA_RESULTADOS["COB"]["Britagens"]["OEE"] = "K207"
+MAPA_RESULTADOS["COB"]["Estoques"]["Argamassa"] = None
+
+MAPA_RESULTADOS["CUI"]["Estoques"]["Argamassa"] = "D194"
+
+MAPA_RESULTADOS["NOB"]["Ensacadeiras"]["OEE"] = "K264"
+
+MAPA_RESULTADOS["PVE"]["Fornos"]["%ST"] = None
+MAPA_RESULTADOS["PVE"]["Fornos"]["CT"] = None
+MAPA_RESULTADOS["PVE"]["Moagens Cru"] = {
+    "OEE": None,
+    "FP": None,
+    "FF": None,
+    "MTBF": None,
+}
+MAPA_RESULTADOS["PVE"]["Britagens"]["OEE"] = None
+MAPA_RESULTADOS["PVE"]["Volumes"]["Clínquer"] = None
+
+MAPA_RESULTADOS["SOB"]["Estoques"]["Argamassa"] = "D194"
+
+MAPA_RESULTADOS["XAM"]["Britagens"]["OEE"] = "K206"
 
 
 def normalizar_valor(valor):
@@ -75,252 +128,3 @@ def extrair_resultados_consolidado(wb):
                 })
 
     return pd.DataFrame(registros)
-            "OEE": "K19",
-            "FP": "G19",
-            "FF": "E19",
-            "MTBF": "I19",
-            "%ST": "C34",
-            "CT": "E34",
-        },
-        "Moagens Cru": {
-            "OEE": "K144",
-            "FP": "G144",
-            "FF": "E144",
-            "MTBF": "I144",
-        },
-        "Moagens Cimento": {
-            "OEE": "K98",
-            "FP": "G98",
-            "FF": "E98",
-            "MTBF": "I98",
-            "%KKC": "F113",
-        },
-        "Ensacadeiras": {
-            "OEE": "K264",
-        },
-        "Britagens": {
-            "OEE": "K207",
-        },
-        "Estoques": {
-            "Clínquer": "E41",
-            "Granel": "D101",
-            "Ensacado": "E101",
-            "Argamassa": None,
-        },
-        "Volumes": {
-            "Cimento": "C98",
-            "Clínquer": "C19",
-        },
-    },
-
-    "CUI": {
-        "Fornos": {
-            "OEE": "K19",
-            "FP": "G19",
-            "FF": "E19",
-            "MTBF": "I19",
-            "%ST": "C34",
-            "CT": "E34",
-        },
-        "Moagens Cru": {
-            "OEE": "K143",
-            "FP": "G143",
-            "FF": "E143",
-            "MTBF": "I143",
-        },
-        "Moagens Cimento": {
-            "OEE": "K98",
-            "FP": "G98",
-            "FF": "E98",
-            "MTBF": "I98",
-            "%KKC": "F112",
-        },
-        "Ensacadeiras": {
-            "OEE": "K263",
-        },
-        "Britagens": {
-            "OEE": "K215",
-        },
-        "Estoques": {
-            "Clínquer": "E41",
-            "Granel": "D101",
-            "Ensacado": "E101",
-            "Argamassa": "D194",
-        },
-        "Volumes": {
-            "Cimento": "C98",
-            "Clínquer": "C19",
-        },
-    },
-
-    "EDE": {
-        "Fornos": {
-            "OEE": "K19",
-            "FP": "G19",
-            "FF": "E19",
-            "MTBF": "I19",
-            "%ST": "C34",
-            "CT": "E34",
-        },
-        "Moagens Cru": {
-            "OEE": "K143",
-            "FP": "G143",
-            "FF": "E143",
-            "MTBF": "I143",
-        },
-        "Moagens Cimento": {
-            "OEE": "K98",
-            "FP": "G98",
-            "FF": "E98",
-            "MTBF": "I98",
-            "%KKC": "F112",
-        },
-        "Ensacadeiras": {
-            "OEE": "K263",
-        },
-        "Britagens": {
-            "OEE": "K215",
-        },
-        "Estoques": {
-            "Clínquer": "E41",
-            "Granel": "D101",
-            "Ensacado": "E101",
-            "Argamassa": None,
-        },
-        "Volumes": {
-            "Cimento": "C98",
-            "Clínquer": "C19",
-        },
-    },
-
-    "NOB": {
-        "Fornos": {
-            "OEE": "K19",
-            "FP": "G19",
-            "FF": "E19",
-            "MTBF": "I19",
-            "%ST": "C34",
-            "CT": "E34",
-        },
-        "Moagens Cru": {
-            "OEE": "K143",
-            "FP": "G143",
-            "FF": "E143",
-            "MTBF": "I143",
-        },
-        "Moagens Cimento": {
-            "OEE": "K98",
-            "FP": "G98",
-            "FF": "E98",
-            "MTBF": "I98",
-            "%KKC": "F112",
-        },
-        "Ensacadeiras": {
-            "OEE": "K264",
-        },
-        "Britagens": {
-            "OEE": "K215",
-        },
-        "Estoques": {
-            "Clínquer": "E41",
-            "Granel": "D101",
-            "Ensacado": "E101",
-            "Argamassa": None,
-        },
-        "Volumes": {
-            "Cimento": "C98",
-            "Clínquer": "C19",
-        },
-    },
-
-    "PVE": {
-        "Fornos": {
-            "OEE": "K19",
-            "FP": "G19",
-            "FF": "E19",
-            "MTBF": "I19",
-            "%ST": None,
-            "CT": None,
-        },
-        "Moagens Cru": {
-            "OEE": None,
-            "FP": None,
-            "FF": None,
-            "MTBF": None,
-        },
-        "Moagens Cimento": {
-            "OEE": "K98",
-            "FP": "G98",
-            "FF": "E98",
-            "MTBF": "I98",
-            "%KKC": "F112",
-        },
-        "Ensacadeiras": {
-            "OEE": "K263",
-        },
-        "Britagens": {
-            "OEE": None,
-        },
-        "Estoques": {
-            "Clínquer": "E41",
-            "Granel": "D101",
-            "Ensacado": "E101",
-            "Argamassa": None,
-        },
-        "Volumes": {
-            "Cimento": "C98",
-            "Clínquer": None,
-        },
-    },
-
-    "SOB": {
-        "Fornos": {
-            "OEE": "K19",
-            "FP": "G19",
-            "FF": "E19",
-            "MTBF": "I19",
-            "%ST": "C34",
-            "CT": "E34",
-        },
-        "Moagens Cru": {
-            "OEE": "K143",
-            "FP": "G143",
-            "FF": "E143",
-            "MTBF": "I143",
-        },
-        "Moagens Cimento": {
-            "OEE": "K98",
-            "FP": "G98",
-            "FF": "E98",
-            "MTBF": "I98",
-            "%KKC": "F112",
-        },
-        "Ensacadeiras": {
-            "OEE": "K263",
-        },
-        "Britagens": {
-            "OEE": "K215",
-        },
-        "Estoques": {
-            "Clínquer": "E41",
-            "Granel": "D101",
-            "Ensacado": "E101",
-            "Argamassa": "D194",
-        },
-        "Volumes": {
-            "Cimento": "C98",
-            "Clínquer": "C19",
-        },
-    },
-
-    "XAM": {
-        "Fornos": {
-            "OEE": "K19",
-            "FP": "G19",
-            "FF": "E19",
-            "MTBF": "I19",
-            "%ST": "C34",
-            "CT": "E34",
-        },
-        "Moagens Cru": {
-            "OEE": "K143",
