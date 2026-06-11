@@ -44,18 +44,13 @@ def registrar_arquivo_consolidado_bytes(
     conteudo_bytes: bytes,
     origem: str = "sistema"
 ):
-    """
-    Salva um consolidado em data/consolidados
-    e registra no JSON de histórico.
-    """
-
     preparar_pastas_historico()
+
     historico = carregar_historico_consolidados()
 
     nome_limpo = limpar_nome_arquivo(nome_arquivo)
     caminho_saida = PASTA_CONSOLIDADOS / nome_limpo
 
-    # Evita sobrescrever arquivo com mesmo nome.
     if caminho_saida.exists():
         stem = caminho_saida.stem
         suffix = caminho_saida.suffix
@@ -79,19 +74,6 @@ def registrar_arquivo_consolidado_bytes(
 
 
 def salvar_resultados_no_historico(resultados):
-    """
-    Use esta função depois que sua consolidação gerar a variável `resultados`.
-
-    Formato esperado:
-
-    resultados = [
-        {
-            "nome_arquivo_final": "Resumo Gerencial CN - 10.06.2026.xlsx",
-            "arquivo_excel": BytesIO(...)
-        }
-    ]
-    """
-
     registros = []
 
     for resultado in resultados:
@@ -118,8 +100,10 @@ def salvar_resultados_no_historico(resultados):
 
 def remover_registro_historico(nome_arquivo: str):
     historico = carregar_historico_consolidados()
+
     novo = [
         item for item in historico
         if item.get("nome_arquivo") != nome_arquivo
     ]
+
     salvar_historico_consolidados(novo)
