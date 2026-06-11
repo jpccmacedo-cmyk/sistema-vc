@@ -2,8 +2,14 @@ import streamlit as st
 import pandas as pd
 from pathlib import Path
 from openpyxl import load_workbook
-from utils.historico import carregar_historico_consolidados, remover_registro_historico
+
+from utils.historico import (
+    carregar_historico_consolidados,
+    remover_registro_historico
+)
+
 from utils.mapa_indicadores import extrair_resultados_consolidado
+
 
 st.set_page_config(
     page_title="Dashboard Consolidado",
