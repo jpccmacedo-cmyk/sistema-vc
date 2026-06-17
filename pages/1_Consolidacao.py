@@ -16,7 +16,6 @@ import traceback
 import warnings
 
 from database.consolidados_db import salvar_resultados_consolidados_no_banco
-from utils.historico import salvar_resultados_no_historico
 
 warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 st.set_page_config(page_title="Consolidador Gerencial CN", page_icon="📊", layout="wide")
