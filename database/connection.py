@@ -6,20 +6,38 @@ from sqlalchemy import create_engine
 
 def get_database_url():
     """
-    Em produção, usa DATABASE_URL do Streamlit Secrets.
-    Em teste local, usa SQLite.
+    Usa PostgreSQL se DATABASE_URL existir no Streamlit Secrets.
+    Caso contrário, usa SQLite local para teste.
     """
 
     try:
-        return st.secrets["DATABASE_URL"]
+        database_url = st.secrets.get("DATABASE_URL", "")
     except Exception:
-        Path("data").mkdir(exist_ok=True)
-        return "sqlite:///data/stfd_historico_local.db"
+        database_url = ""
+
+    if database_url:
+        database_url = str(database_url).strip()
+
+        # Compatibilidade com URLs que começam com postgresql://
+        if database_url.startswith("postgresql://"):
+            database_url = database_url.replace(
+                "postgresql://",
+                "postgresql+psycopg2://",
+                1
+            )
+
+        return database_url
+
+    Path("data").mkdir(exist_ok=True)
+
+    return "sqlite:///data/stfd_historico_local.db"
 
 
 def get_engine():
+    database_url = get_database_url()
+
     return create_engine(
-        get_database_url(),
+        database_url,
         future=True,
         pool_pre_ping=True
     )
