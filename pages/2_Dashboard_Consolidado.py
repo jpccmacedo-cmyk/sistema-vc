@@ -1,10 +1,11 @@
+import json
+
 import streamlit as st
 import pandas as pd
 
 from database.consolidados_db import (
     init_consolidados_db,
     listar_consolidados,
-    carregar_indicadores_consolidados,
     carregar_arquivo_consolidado,
     excluir_consolidado,
 )
@@ -22,15 +23,28 @@ st.title("📊 Dashboard dos Consolidados")
 st.caption("Histórico compartilhado dos arquivos consolidados gerados pelo sistema.")
 
 df_consolidados = listar_consolidados()
-df_indicadores = carregar_indicadores_consolidados()
 
 if df_consolidados.empty:
-    st.warning("Nenhum consolidado salvo no histórico ainda. Gere um consolidado na página de Consolidação.")
+    st.warning(
+        "Nenhum consolidado salvo no histórico ainda. "
+        "Gere um consolidado na página de Consolidação."
+    )
     st.stop()
 
 st.sidebar.header("🔎 Filtros")
 
+# =========================
+# Tratamento de ano/mês
+# =========================
+
+df_consolidados["ano"] = pd.to_numeric(df_consolidados["ano"], errors="coerce")
+df_consolidados["mes"] = pd.to_numeric(df_consolidados["mes"], errors="coerce")
+
 anos = sorted(df_consolidados["ano"].dropna().unique())
+
+if not anos:
+    st.error("Não há ano identificado nos consolidados salvos.")
+    st.stop()
 
 ano_sel = st.sidebar.selectbox(
     "Ano",
@@ -38,9 +52,13 @@ ano_sel = st.sidebar.selectbox(
     index=len(anos) - 1
 )
 
-df_cons_ano = df_consolidados[df_consolidados["ano"] == ano_sel].copy()
+df_ano = df_consolidados[df_consolidados["ano"] == ano_sel].copy()
 
-meses = sorted(df_cons_ano["mes"].dropna().unique())
+meses = sorted(df_ano["mes"].dropna().unique())
+
+if not meses:
+    st.error("Não há mês identificado para o ano selecionado.")
+    st.stop()
 
 mes_sel = st.sidebar.selectbox(
     "Mês",
@@ -48,11 +66,15 @@ mes_sel = st.sidebar.selectbox(
     index=len(meses) - 1
 )
 
-df_cons_mes = df_cons_ano[df_cons_ano["mes"] == mes_sel].copy()
+df_mes = df_ano[df_ano["mes"] == mes_sel].copy()
+
+if df_mes.empty:
+    st.warning("Nenhum consolidado encontrado para os filtros selecionados.")
+    st.stop()
 
 opcoes_consolidados = [
     f'{row["nome_arquivo"]} — {row["data_geracao"]}'
-    for _, row in df_cons_mes.iterrows()
+    for _, row in df_mes.iterrows()
 ]
 
 opcao_consolidado = st.sidebar.selectbox(
@@ -61,14 +83,14 @@ opcao_consolidado = st.sidebar.selectbox(
 )
 
 idx = opcoes_consolidados.index(opcao_consolidado)
-consolidado_selecionado = df_cons_mes.iloc[idx]
+consolidado_selecionado = df_mes.iloc[idx]
 consolidado_id = consolidado_selecionado["consolidado_id"]
 
-df_base = df_indicadores[
-    df_indicadores["consolidado_id"] == consolidado_id
-].copy()
+# =========================
+# Resumo
+# =========================
 
-st.subheader("📌 Resumo do consolidado")
+st.subheader("📌 Resumo do consolidado selecionado")
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -86,6 +108,10 @@ with col4:
 
 st.divider()
 
+# =========================
+# Download
+# =========================
+
 st.subheader("📥 Download do consolidado")
 
 nome_arquivo, arquivo_bytes = carregar_arquivo_consolidado(consolidado_id)
@@ -102,148 +128,94 @@ else:
 
 st.divider()
 
-if df_base.empty:
-    st.warning("Nenhum indicador foi extraído deste consolidado.")
-    st.stop()
+# =========================
+# Histórico de consolidados
+# =========================
 
-plantas = sorted(df_base["planta"].dropna().unique())
-grupos = sorted(df_base["grupo"].dropna().unique())
-indicadores = sorted(df_base["indicador"].dropna().unique())
+st.subheader("📚 Histórico de consolidados salvos")
 
-col_f1, col_f2, col_f3 = st.columns(3)
+df_exibir = df_consolidados.copy()
 
-with col_f1:
-    filtro_plantas = st.multiselect(
-        "Plantas",
-        plantas,
-        default=plantas
-    )
+colunas_exibir = [
+    "nome_arquivo",
+    "data_processada",
+    "ano",
+    "mes",
+    "data_geracao",
+]
 
-with col_f2:
-    filtro_grupos = st.multiselect(
-        "Grupos",
-        grupos,
-        default=grupos
-    )
-
-with col_f3:
-    filtro_indicadores = st.multiselect(
-        "Indicadores",
-        indicadores,
-        default=indicadores
-    )
-
-df_filtrado = df_base[
-    df_base["planta"].isin(filtro_plantas)
-    & df_base["grupo"].isin(filtro_grupos)
-    & df_base["indicador"].isin(filtro_indicadores)
-].copy()
-
-st.subheader("📊 Indicadores extraídos")
+colunas_exibir = [
+    col for col in colunas_exibir
+    if col in df_exibir.columns
+]
 
 st.dataframe(
-    df_filtrado,
+    df_exibir[colunas_exibir],
     use_container_width=True
+)
+
+csv = df_exibir[colunas_exibir].to_csv(index=False).encode("utf-8-sig")
+
+st.download_button(
+    "⬇️ Baixar histórico em CSV",
+    data=csv,
+    file_name="historico_consolidados.csv",
+    mime="text/csv"
 )
 
 st.divider()
 
-st.subheader("📈 Comparativo por planta")
+# =========================
+# Logs e abas
+# =========================
 
-df_grafico = df_filtrado.copy()
-df_grafico["resultado"] = pd.to_numeric(df_grafico["resultado"], errors="coerce")
-df_grafico = df_grafico.dropna(subset=["resultado"])
+st.subheader("📝 Detalhes do consolidado")
 
-if df_grafico.empty:
-    st.info("Não há valores numéricos suficientes para gerar gráfico.")
-else:
-    col_g1, col_g2 = st.columns(2)
+col_log, col_abas = st.columns(2)
 
-    with col_g1:
-        indicador_grafico = st.selectbox(
-            "Indicador",
-            sorted(df_grafico["indicador"].unique())
-        )
+with col_log:
+    st.markdown("### Logs")
 
-    with col_g2:
-        grupos_disponiveis = sorted(
-            df_grafico[df_grafico["indicador"] == indicador_grafico]["grupo"].unique()
-        )
+    logs_raw = consolidado_selecionado.get("logs", "")
 
-        grupo_grafico = st.selectbox(
-            "Grupo",
-            grupos_disponiveis
-        )
+    try:
+        logs = json.loads(logs_raw) if logs_raw else []
+    except Exception:
+        logs = []
 
-    df_plot = df_grafico[
-        (df_grafico["indicador"] == indicador_grafico)
-        & (df_grafico["grupo"] == grupo_grafico)
-    ]
+    if logs:
+        st.code("\n".join(logs), language="text")
+    else:
+        st.info("Nenhum log disponível para este consolidado.")
 
-    tabela_plot = df_plot.pivot_table(
-        index="planta",
-        values="resultado",
-        aggfunc="first"
-    )
+with col_abas:
+    st.markdown("### Abas criadas")
 
-    st.bar_chart(tabela_plot)
+    abas_raw = consolidado_selecionado.get("abas_criadas", "")
 
-st.divider()
+    try:
+        abas = json.loads(abas_raw) if abas_raw else []
+    except Exception:
+        abas = []
 
-st.subheader("📚 Histórico do indicador")
-
-df_hist = df_indicadores.copy()
-df_hist["resultado"] = pd.to_numeric(df_hist["resultado"], errors="coerce")
-df_hist = df_hist.dropna(subset=["resultado"])
-
-if df_hist.empty:
-    st.info("Ainda não há histórico suficiente.")
-else:
-    col_h1, col_h2 = st.columns(2)
-
-    with col_h1:
-        indicador_hist = st.selectbox(
-            "Indicador histórico",
-            sorted(df_hist["indicador"].dropna().unique())
-        )
-
-    with col_h2:
-        grupo_hist = st.selectbox(
-            "Grupo histórico",
-            sorted(df_hist[df_hist["indicador"] == indicador_hist]["grupo"].dropna().unique())
-        )
-
-    df_hist_filtrado = df_hist[
-        (df_hist["indicador"] == indicador_hist)
-        & (df_hist["grupo"] == grupo_hist)
-    ].copy()
-
-    df_hist_filtrado["periodo"] = (
-        df_hist_filtrado["ano"].astype(str)
-        + "-"
-        + df_hist_filtrado["mes"].astype(str).str.zfill(2)
-    )
-
-    st.dataframe(
-        df_hist_filtrado,
-        use_container_width=True
-    )
-
-    grafico_hist = df_hist_filtrado.pivot_table(
-        index="periodo",
-        columns="planta",
-        values="resultado",
-        aggfunc="first"
-    )
-
-    st.line_chart(grafico_hist)
+    if abas:
+        for aba in abas:
+            st.write(f"- {aba}")
+    else:
+        st.info("Nenhuma aba registrada para este consolidado.")
 
 st.divider()
+
+# =========================
+# Administração
+# =========================
 
 st.subheader("⚙️ Administração")
 
 with st.expander("Excluir consolidado selecionado"):
-    st.warning("Atenção: isso remove o arquivo e os indicadores deste consolidado do histórico.")
+    st.warning(
+        "Atenção: essa ação remove o arquivo consolidado do histórico compartilhado."
+    )
 
     if st.button("Excluir consolidado selecionado"):
         excluir_consolidado(consolidado_id)
