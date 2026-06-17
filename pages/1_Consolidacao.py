@@ -795,7 +795,15 @@ if botao_processar:
                 data_referencia,
                 copiar_estilos=copiar_estilos
             )
+ids_consolidados = salvar_resultados_consolidados_no_banco(resultados)
 
+for resultado in resultados:
+    resultado["arquivo_excel"].seek(0)
+
+st.success(
+    f"Consolidado(s) salvo(s) no histórico compartilhado. "
+    f"{len(ids_consolidados)} registro(s) criado(s)."
+)
         # Salva os consolidados no histórico do dashboard
         salvar_resultados_no_historico(resultados)
 
