@@ -1,6 +1,138 @@
 from datetime import datetime
 from io import BytesIO
-import uuid_indicadores iimport uuid
+import uuid
+import json
+
+import pandas("data_processada")import pandas as pd
+
+    if data_processada:
+        data_texto = data_processada.strftime("%Y-%m-%d")
+        ano = data_processada.year
+        mes = data_processada.month
+    else:
+        data_texto = None
+        ano = None
+        mes = None
+
+    logs = json.dumps(resultado.get("logs", []), ensure_ascii=False)
+    abas_criadas = json.dumps(resultado.get("abas_criadas", []), ensure_ascii=False)
+
+    engine = get_engine()
+
+    with engine.begin() as conn:
+        conn.execute(
+            text("""
+                INSERT INTO consolidados_gerados (
+                    consolidado_id,
+                    nome_arquivo,
+                    data_processada,
+                    ano,
+                    mes,
+                    data_geracao,
+                    arquivo_excel,
+                    logs,
+                    abas_criadas
+                )
+                VALUES (
+                    :consolidado_id,
+                    :nome_arquivo,
+                    :data_processada,
+                    :ano,
+                    :mes,
+                    :data_geracao,
+                    :arquivo_excel,
+                    :logs,
+                    :abas_criadas
+                )
+            """),
+            {
+                "consolidado_id": consolidado_id,
+                "nome_arquivo": nome_arquivo,
+                "data_processada": data_texto,
+                "ano": ano,
+                "mes": mes,
+                "data_geracao": data_geracao,
+                "arquivo_excel": arquivo_bytes,
+                "logs": logs,
+                "abas_criadas": abas_criadas,
+            }
+        )
+
+    wb = load_workbook(BytesIO(arquivo_bytes), data_only=True)
+    df_indicadores = extrair_resultados_consolidado(wb)
+
+    if not df_indicadores.empty:
+        registros = []
+
+        for _, row in df_indicadores.iterrows():
+            registros.append({
+                "id": str(uuid.uuid4()),
+                "consolidado_id": consolidado_id,
+                "data_processada": data_texto,
+                "ano": ano,
+                "mes": mes,
+                "planta": row.get("Planta"),
+                "grupo": row.get("Grupo"),
+                "indicador": row.get("Indicador"),
+                "celula": row.get("Celula"),
+                "resultado": _normalizar_resultado_para_float(row.get("Resultado")),
+                "data_geracao": data_geracao,
+            })
+
+        df_save = pd.DataFrame(registros)
+
+        df_save.to_sql(
+            "consolidado_indicadores",
+            engine,
+            if_exists="append",
+            index=False
+        )
+
+    return consolidado_id
+
+
+def salvar_resultados_consolidados_no_banco(resultados):
+    ids = []
+
+    for resultado in resultados:
+        consolidado_id = salvar_consolidado_no_banco(resultado)
+        ids.append(consolidado_id)
+
+    return ids
+
+
+def listar_consolidados():
+    init_consolidados_db()
+
+    engine = get_engine()
+
+    query = """
+        SELECT
+            consolidado_id,
+            nome_arquivo,
+            data_processada,
+            ano,
+            mes,
+            data_geracao,
+            logs,
+            abas_criadas
+        FROM consolidados_gerados
+        ORDER BY data_processada DESC, data_geracao DESC
+    """
+
+    return pd.read_sql(query, engine)
+
+
+def carregar_indicadores_consolidados():
+    init_consolidados_db()
+
+    engine = get_engine()
+
+    query = """
+        SELECT
+            i.*,
+            c.nome_arquivo
+        FROM consolidado_indicadores i
         LEFT JOIN consolidados_gerados c
             ON i.consolidado_id = c.consolidado_id
     """
@@ -51,9 +183,6 @@ def excluir_consolidado(consolidado_id):
             text("DELETE FROM consolidados_gerados WHERE consolidado_id = :consolidado_id"),
             {"consolidado_id": consolidado_id}
         )
-import json
-
-import pandas as pd
 from sqlalchemy import text
 from openpyxl import load_workbook
 
@@ -135,19 +264,6 @@ def _normalizar_resultado_para_float(valor):
 
 
 def salvar_consolidado_no_banco(resultado):
-    """
-    Salva um consolidado gerado pela página de Consolidação no PostgreSQL.
-
-    Espera o formato:
-    {
-        "arquivo_excel": BytesIO(...),
-        "nome_arquivo_final": "...xlsx",
-        "logs": [...],
-        "abas_criadas": [...],
-        "data_processada": date(...)
-    }
-    """
-
     init_consolidados_db()
 
     consolidado_id = str(uuid.uuid4())
@@ -156,133 +272,3 @@ def salvar_consolidado_no_banco(resultado):
     nome_arquivo = resultado["nome_arquivo_final"]
     arquivo_bytes = _bytes_from_resultado(resultado)
 
-    data_processada = resultado.get("data_processada")
-
-    if data_processada:
-        data_texto = data_processada.strftime("%Y-%m-%d")
-        ano = data_processada.year
-        mes = data_processada.month
-    else:
-        data_texto = None
-        ano = None
-        mes = None
-
-    logs = json.dumps(resultado.get("logs", []), ensure_ascii=False)
-    abas_criadas = json.dumps(resultado.get("abas_criadas", []), ensure_ascii=False)
-
-    engine = get_engine()
-
-    with engine.begin() as conn:
-        conn.execute(
-            text("""
-                INSERT INTO consolidados_gerados (
-                    consolidado_id,
-                    nome_arquivo,
-                    data_processada,
-                    ano,
-                    mes,
-                    data_geracao,
-                    arquivo_excel,
-                    logs,
-                    abas_criadas
-                )
-                VALUES (
-                    :consolidado_id,
-                    :nome_arquivo,
-                    :data_processada,
-                    :ano,
-                    :mes,
-                    :data_geracao,
-                    :arquivo_excel,
-                    :logs,
-                    :abas_criadas
-                )
-            """),
-            {
-                "consolidado_id": consolidado_id,
-                "nome_arquivo": nome_arquivo,
-                "data_processada": data_texto,
-                "ano": ano,
-                "mes": mes,
-                "data_geracao": data_geracao,
-                "arquivo_excel": arquivo_bytes,
-                "logs": logs,
-                "abas_criadas": abas_criadas,
-            }
-        )
-
-    # Extrai indicadores do consolidado e salva no banco
-    wb = load_workbook(BytesIO(arquivo_bytes), data_only=True)
-    df_indicadores = extrair_resultados_consolidado(wb)
-
-    if not df_indicadores.empty:
-        registros = []
-
-        for _, row in df_indicadores.iterrows():
-            registros.append({
-                "id": str(uuid.uuid4()),
-                "consolidado_id": consolidado_id,
-                "data_processada": data_texto,
-                "ano": ano,
-                "mes": mes,
-                "planta": row.get("Planta"),
-                "grupo": row.get("Grupo"),
-                "indicador": row.get("Indicador"),
-                "celula": row.get("Celula"),
-                "resultado": _normalizar_resultado_para_float(row.get("Resultado")),
-                "data_geracao": data_geracao,
-            })
-
-        df_save = pd.DataFrame(registros)
-
-        df_save.to_sql(
-            "consolidado_indicadores",
-            engine,
-            if_exists="append",
-            index=False
-        )
-
-    return consolidado_id
-
-
-def salvar_resultados_consolidados_no_banco(resultados):
-    ids = []
-
-    for resultado in resultados:
-        consolidado_id = salvar_consolidado_no_banco(resultado)
-        ids.append(consolidado_id)
-
-    return ids
-
-
-def listar_consolidados():
-    init_consolidados_db()
-
-    engine = get_engine()
-
-    query = """
-        SELECT
-            consolidado_id,
-            nome_arquivo,
-            data_processada,
-            ano,
-            mes,
-            data_geracao,
-            logs,
-            abas_criadas
-        FROM consolidados_gerados
-        ORDER BY data_processada DESC, data_geracao DESC
-    """
-
-    return pd.read_sql(query, engine)
-
-
-def carregar_indicadores_consolidados():
-    init_consolidados_db()
-
-    engine = get_engine()
-
-    query = """
-        SELECT
-            i.*,
-            c.nome_arquivo
