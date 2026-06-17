@@ -12,6 +12,12 @@ from database.stfd_db import (
     excluir_batch,
 )
 
+st.set_page_config(
+    page_title="Dashboard ST & FD",
+    page_icon="📈",
+    layout="wide"
+)
+
 
 # ============================================================
 # PARSER DO EXCEL ST & FD
@@ -31,13 +37,13 @@ def pv(v):
         return float(v)
 
     if isinstance(v, str):
-        c = v.replace(",", ".").replace("%", "").strip()
+        texto = v.replace(",", ".").replace("%", "").strip()
 
-        if c in ["", "-"]:
+        if texto in ["", "-"]:
             return None
 
         try:
-            return float(c)
+            return float(texto)
         except Exception:
             return None
 
@@ -68,26 +74,19 @@ def parse_date(v):
                 pass
 
         try:
-            d = pd.to_datetime(texto, dayfirst=True, errors="coerce")
-
-            if pd.notna(d):
-                return d.to_pydatetime()
+            data = pd.to_datetime(texto, dayfirst=True, errors="coerce")
+            if pd.notna(data):
+                return data.to_pydatetime()
         except Exception:
             pass
 
     return None
 
 
-def find_header_row(df, keyword):
-    max_rows = min(10, len(df))
-
-    for i in range(max_rows):
-        row = df.iloc[i].tolist()
-
-        for cell in row:
-            texto = str(cell).strip().lower()
-
-            if texto.startswith(keyword.lower()):
+def find_header_row(df, keyword="Planta"):
+    for i in range(min(10, len(df))):
+        for cell in df.iloc[i].tolist():
+            if str(cell).strip().lower().startswith(keyword.lower()):
                 return i
 
     return -1
@@ -100,8 +99,7 @@ def parse_st(df, batch_id, data_upload):
     hr = find_header_row(df, "Planta")
 
     if hr < 0:
-        erros.append("ST: coluna Planta não encontrada")
-        return pd.DataFrame(), erros
+        return pd.DataFrame(), ["ST: coluna Planta não encontrada"]
 
     header = df.iloc[hr].tolist()
 
@@ -112,30 +110,27 @@ def parse_st(df, batch_id, data_upload):
     date_cols = []
 
     for j, value in enumerate(header):
-        s = str(value).strip()
-        sl = s.lower()
+        texto = str(value).strip()
+        texto_lower = texto.lower()
 
-        if sl.startswith("planta"):
+        if texto_lower.startswith("planta"):
             pc = j
-        elif s == "M300":
+        elif texto == "M300":
             mc = j
-        elif s == "RF":
+        elif texto == "RF":
             rc = j
-        elif sl == "real":
+        elif texto_lower == "real":
             rlc = j
         else:
-            d = parse_date(value)
-
-            if d:
-                date_cols.append({"col": j, "date": d})
+            data = parse_date(value)
+            if data:
+                date_cols.append({"col": j, "date": data})
 
     if pc < 0 or not date_cols:
-        erros.append("ST: estrutura inválida")
-        return pd.DataFrame(), erros
+        return pd.DataFrame(), ["ST: estrutura inválida"]
 
-    first_date = date_cols[0]["date"]
-    ano = first_date.year
-    mes = first_date.month
+    ano = date_cols[0]["date"].year
+    mes = date_cols[0]["date"].month
 
     for i in range(hr + 1, len(df)):
         row = df.iloc[i].tolist()
@@ -151,7 +146,6 @@ def parse_st(df, batch_id, data_upload):
 
         for dc in date_cols:
             data = dc["date"]
-            valor = pv(row[dc["col"]])
 
             registros.append({
                 "batch_id": batch_id,
@@ -162,7 +156,7 @@ def parse_st(df, batch_id, data_upload):
                 "kpi": "ST",
                 "dia": data.day,
                 "data_label": data.strftime("%d/%m"),
-                "valor_real": valor,
+                "valor_real": pv(row[dc["col"]]),
                 "m300": m300,
                 "rf": rf,
                 "acumulado_mes": acumulado,
@@ -179,8 +173,7 @@ def parse_fd(df, batch_id, data_upload):
     hr = find_header_row(df, "Planta")
 
     if hr < 0:
-        erros.append("FD: coluna Planta não encontrada")
-        return pd.DataFrame(), erros
+        return pd.DataFrame(), ["FD: coluna Planta não encontrada"]
 
     header = df.iloc[hr].tolist()
 
@@ -190,28 +183,25 @@ def parse_fd(df, batch_id, data_upload):
     date_cols = []
 
     for j, value in enumerate(header):
-        s = str(value).strip()
-        sl = s.lower()
+        texto = str(value).strip()
+        texto_lower = texto.lower()
 
-        if sl.startswith("planta"):
+        if texto_lower.startswith("planta"):
             pc = j
-        elif sl == "kpi":
+        elif texto_lower == "kpi":
             kc = j
-        elif "real" in sl and "tt" in sl:
+        elif "real" in texto_lower and "tt" in texto_lower:
             ac = j
         else:
-            d = parse_date(value)
-
-            if d:
-                date_cols.append({"col": j, "date": d})
+            data = parse_date(value)
+            if data:
+                date_cols.append({"col": j, "date": data})
 
     if pc < 0 or not date_cols:
-        erros.append("FD: estrutura inválida")
-        return pd.DataFrame(), erros
+        return pd.DataFrame(), ["FD: estrutura inválida"]
 
-    first_date = date_cols[0]["date"]
-    ano = first_date.year
-    mes = first_date.month
+    ano = date_cols[0]["date"].year
+    mes = date_cols[0]["date"].month
 
     for i in range(hr + 1, len(df)):
         row = df.iloc[i].tolist()
@@ -271,16 +261,10 @@ def parse_st_fd_excel(file_bytes, batch_id, data_upload):
     for sheet in xls.sheet_names:
         nome = sheet.lower()
 
-        if "diário" in nome and "st" in nome:
+        if ("diário" in nome or "diario" in nome) and "st" in nome:
             st_sheet = sheet
 
-        if "diario" in nome and "st" in nome:
-            st_sheet = sheet
-
-        if "diário" in nome and "fd" in nome and "multiflex" in nome:
-            fd_sheet = sheet
-
-        if "diario" in nome and "fd" in nome and "multiflex" in nome:
+        if ("diário" in nome or "diario" in nome) and "fd" in nome and "multiflex" in nome:
             fd_sheet = sheet
 
     if st_sheet:
@@ -293,12 +277,12 @@ def parse_st_fd_excel(file_bytes, batch_id, data_upload):
             engine="openpyxl"
         )
 
-        registros_st, erros_st = parse_st(df_st, batch_id, data_upload)
+        parsed, err = parse_st(df_st, batch_id, data_upload)
 
-        if not registros_st.empty:
-            todos.append(registros_st)
+        if not parsed.empty:
+            todos.append(parsed)
 
-        erros.extend(erros_st)
+        erros.extend(err)
     else:
         erros.append("Aba 'Diário - ST' não encontrada")
 
@@ -312,45 +296,40 @@ def parse_st_fd_excel(file_bytes, batch_id, data_upload):
             engine="openpyxl"
         )
 
-        registros_fd, erros_fd = parse_fd(df_fd, batch_id, data_upload)
+        parsed, err = parse_fd(df_fd, batch_id, data_upload)
 
-        if not registros_fd.empty:
-            todos.append(registros_fd)
+        if not parsed.empty:
+            todos.append(parsed)
 
-        erros.extend(erros_fd)
+        erros.extend(err)
     else:
         erros.append("Aba 'Diário - FD Multiflex' não encontrada")
 
     if not todos:
         return pd.DataFrame(), erros
 
-    df_final = pd.concat(todos, ignore_index=True)
-
-    return df_final, erros
+    return pd.concat(todos, ignore_index=True), erros
 
 
 # ============================================================
-# FUNÇÕES DE ESTILO DO DASHBOARD
+# CORES E TABELAS
 # ============================================================
 
 def cor_st(valor, m300, rf):
     if pd.isna(valor):
         return "background-color: #ffffff"
 
-    tem_m300 = not pd.isna(m300)
-    tem_rf = not pd.isna(rf)
-
-    if tem_m300 and tem_rf:
+    if pd.notna(m300) and pd.notna(rf):
         if valor >= m300 and valor >= rf:
             return "background-color: #C6EFCE"
         if valor < m300 and valor < rf:
             return "background-color: #FFC7CE"
         return "background-color: #FFEB9C"
 
-    if tem_m300:
+    if pd.notna(m300):
         return "background-color: #C6EFCE" if valor >= m300 else "background-color: #FFC7CE"
 
-    if tem_rf:
+    if pd.notna(rf):
         return "background-color: #C6EFCE" if valor >= rf else "background-color: #FFC7CE"
 
     return "background-color: #FFEB9C"
@@ -375,30 +354,28 @@ def montar_tabela_st(df_mes):
     if df_st.empty:
         return pd.DataFrame()
 
-    df_st["valor_real"] = pd.to_numeric(df_st["valor_real"], errors="coerce")
-    df_st["m300"] = pd.to_numeric(df_st["m300"], errors="coerce")
-    df_st["rf"] = pd.to_numeric(df_st["rf"], errors="coerce")
-    df_st["acumulado_mes"] = pd.to_numeric(df_st["acumulado_mes"], errors="coerce")
+    for col in ["valor_real", "m300", "rf", "acumulado_mes"]:
+        df_st[col] = pd.to_numeric(df_st[col], errors="coerce")
 
     linhas = []
 
     for planta, bloco in df_st.groupby("planta"):
         bloco = bloco.sort_values("dia")
 
-        m300 = bloco["m300"].dropna().iloc[0] if bloco["m300"].notna().any() else None
-        rf = bloco["rf"].dropna().iloc[0] if bloco["rf"].notna().any() else None
-        acc = bloco["acumulado_mes"].dropna().iloc[0] if bloco["acumulado_mes"].notna().any() else None
-
         linha = {
             "Planta": planta,
-            "M300": m300,
-            "RF": rf,
+            "M300": bloco["m300"].dropna().iloc[0] if bloco["m300"].notna().any() else None,
+            "RF": bloco["rf"].dropna().iloc[0] if bloco["rf"].notna().any() else None,
         }
 
         for _, row in bloco.iterrows():
             linha[row["data_label"]] = row["valor_real"]
 
-        linha["Acc mês"] = acc
+        linha["Acc mês"] = (
+            bloco["acumulado_mes"].dropna().iloc[0]
+            if bloco["acumulado_mes"].notna().any()
+            else None
+        )
 
         linhas.append(linha)
 
@@ -409,7 +386,7 @@ def estilizar_st(tabela):
     if tabela.empty:
         return tabela
 
-    colunas_dias = [
+    dias = [
         c for c in tabela.columns
         if c not in ["Planta", "M300", "RF", "Acc mês"]
     ]
@@ -417,16 +394,13 @@ def estilizar_st(tabela):
     def aplicar(row):
         estilos = []
 
-        m300 = row.get("M300")
-        rf = row.get("RF")
-
         for col in tabela.columns:
             if col in ["Planta", "M300", "RF"]:
                 estilos.append("background-color: #eef2f7; font-weight: 600")
-            elif col in colunas_dias:
-                estilos.append(cor_st(row[col], m300, rf))
+            elif col in dias:
+                estilos.append(cor_st(row[col], row.get("M300"), row.get("RF")))
             elif col == "Acc mês":
-                estilos.append(cor_st(row[col], m300, rf) + "; font-weight: 700")
+                estilos.append(cor_st(row[col], row.get("M300"), row.get("RF")) + "; font-weight: 700")
             else:
                 estilos.append("")
 
@@ -441,24 +415,26 @@ def montar_tabela_fd(df_mes):
     if df_fd.empty:
         return pd.DataFrame()
 
-    df_fd["valor_real"] = pd.to_numeric(df_fd["valor_real"], errors="coerce")
-    df_fd["acumulado_mes"] = pd.to_numeric(df_fd["acumulado_mes"], errors="coerce")
+    for col in ["valor_real", "acumulado_mes"]:
+        df_fd[col] = pd.to_numeric(df_fd[col], errors="coerce")
 
     linhas = []
 
     for planta, bloco in df_fd.groupby("planta"):
         bloco = bloco.sort_values("dia")
 
-        acc = bloco["acumulado_mes"].dropna().iloc[0] if bloco["acumulado_mes"].notna().any() else None
-
         linha = {
-            "Planta": planta,
+            "Planta": planta
         }
 
         for _, row in bloco.iterrows():
             linha[row["data_label"]] = row["valor_real"]
 
-        linha["Real TT"] = acc
+        linha["Real TT"] = (
+            bloco["acumulado_mes"].dropna().iloc[0]
+            if bloco["acumulado_mes"].notna().any()
+            else None
+        )
 
         linhas.append(linha)
 
@@ -480,28 +456,200 @@ def estilizar_fd(tabela):
 
         return estilos
 
-    format_dict = {}
-
-    for col in tabela.columns:
-        if col != "Planta":
-            format_dict[col] = lambda x: "" if pd.isna(x) else f"{x:.2%}"
+    format_dict = {
+        col: (lambda x: "" if pd.isna(x) else f"{x:.2%}")
+        for col in tabela.columns
+        if col != "Planta"
+    }
 
     return tabela.style.apply(aplicar, axis=1).format(format_dict)
 
 
 # ============================================================
-# APP STREAMLIT
+# APP
 # ============================================================
-
-st.set_page_config(
-    page_title="Dashboard ST & FD",
-    page_icon="📈",
-    layout="wide"
-)
 
 init_stfd_db()
 
 st.title("📈 Dashboard ST & FD")
-st.caption("Dashboard com histórico compartilhado em banco de dados.")
+st.caption("Dashboard com histórico compartilhado em PostgreSQL.")
 
 st.markdown("""
+<div style="display:flex;gap:20px;margin:8px 0 16px 0;font-size:13px;">
+  <div><span style="background:#C6EFCE;padding:3px 12px;border-radius:4px;"></span> Dentro da meta</div>
+  <div><span style="background:#FFEB9C;padding:3px 12px;border-radius:4px;"></span> Parcial</div>
+  <div><span style="background:#FFC7CE;padding:3px 12px;border-radius:4px;"></span> Fora da meta</div>
+</div>
+""", unsafe_allow_html=True)
+
+st.sidebar.header("⚙️ Ações")
+
+with st.sidebar.expander("📤 Enviar novo Excel", expanded=True):
+    arquivo = st.file_uploader(
+        "Excel com abas Diário - ST e Diário - FD Multiflex",
+        type=["xlsx", "xlsm"]
+    )
+
+    usuario = st.text_input("Usuário / responsável", value="")
+    observacao = st.text_area("Observação", value="")
+
+    if st.button("Salvar upload no histórico", disabled=arquivo is None):
+        try:
+            batch_id, data_upload = criar_batch_upload(
+                arquivo.name,
+                usuario or None,
+                observacao or None
+            )
+
+            df_records, erros = parse_st_fd_excel(
+                arquivo.getvalue(),
+                batch_id,
+                data_upload
+            )
+
+            if df_records.empty:
+                excluir_batch(batch_id)
+                st.error("Nenhum registro foi extraído do arquivo.")
+
+                for erro in erros:
+                    st.write(f"- {erro}")
+
+                st.stop()
+
+            qtd = salvar_records_stfd(df_records)
+
+            st.success(f"Upload salvo com sucesso. {qtd} registro(s) gravado(s).")
+
+            if erros:
+                st.warning("Avisos encontrados:")
+
+                for erro in erros:
+                    st.write(f"- {erro}")
+
+            st.rerun()
+
+        except Exception as e:
+            st.error(f"Erro ao salvar upload: {e}")
+
+
+df_uploads = listar_uploads()
+df = carregar_records()
+
+if df.empty:
+    st.info("Nenhum dado ST/FD salvo ainda. Envie um Excel no menu lateral.")
+    st.stop()
+
+st.sidebar.header("🔎 Filtros")
+
+anos = sorted(df["ano"].dropna().unique())
+
+ano_sel = st.sidebar.selectbox(
+    "Ano",
+    anos,
+    index=len(anos) - 1
+)
+
+df_ano = df[df["ano"] == ano_sel].copy()
+
+meses = sorted(df_ano["mes"].dropna().unique())
+
+mes_sel = st.sidebar.selectbox(
+    "Mês",
+    meses,
+    index=len(meses) - 1
+)
+
+df_mes = df_ano[df_ano["mes"] == mes_sel].copy()
+
+plantas = sorted(df_mes["planta"].dropna().unique())
+
+plantas_sel = st.sidebar.multiselect(
+    "Plantas",
+    plantas,
+    default=plantas
+)
+
+df_mes = df_mes[df_mes["planta"].isin(plantas_sel)].copy()
+
+st.subheader("📌 Resumo")
+
+col1, col2, col3, col4 = st.columns(4)
+
+col1.metric("Uploads salvos", df_uploads["batch_id"].nunique())
+col2.metric("Ano selecionado", int(ano_sel))
+col3.metric("Mês selecionado", int(mes_sel))
+col4.metric("Plantas", df_mes["planta"].nunique())
+
+st.divider()
+
+tab_st, tab_fd, tab_uploads, tab_base = st.tabs([
+    "ST Heatmap",
+    "FD Multiflex",
+    "Histórico de uploads",
+    "Base filtrada"
+])
+
+with tab_st:
+    st.subheader(f"ST Heatmap — {int(mes_sel):02d}/{int(ano_sel)}")
+
+    tabela_st = montar_tabela_st(df_mes)
+
+    if tabela_st.empty:
+        st.info("Nenhum dado ST para os filtros selecionados.")
+    else:
+        st.dataframe(
+            estilizar_st(tabela_st),
+            use_container_width=True,
+            hide_index=True
+        )
+
+with tab_fd:
+    st.subheader(f"FD Multiflex — {int(mes_sel):02d}/{int(ano_sel)}")
+
+    tabela_fd = montar_tabela_fd(df_mes)
+
+    if tabela_fd.empty:
+        st.info("Nenhum dado FD para os filtros selecionados.")
+    else:
+        st.dataframe(
+            estilizar_fd(tabela_fd),
+            use_container_width=True,
+            hide_index=True
+        )
+
+with tab_uploads:
+    st.subheader("Histórico de uploads")
+
+    st.dataframe(df_uploads, use_container_width=True)
+
+    if not df_uploads.empty:
+        opcoes = [
+            f'{row["nome_arquivo"]} — {row["data_upload"]}'
+            for _, row in df_uploads.iterrows()
+        ]
+
+        opcao = st.selectbox(
+            "Selecionar upload para excluir",
+            opcoes
+        )
+
+        batch_id_excluir = df_uploads.iloc[opcoes.index(opcao)]["batch_id"]
+
+        if st.button("Excluir upload selecionado"):
+            excluir_batch(batch_id_excluir)
+            st.success("Upload excluído com sucesso.")
+            st.rerun()
+
+with tab_base:
+    st.subheader("Base filtrada")
+
+    st.dataframe(df_mes, use_container_width=True)
+
+    csv = df_mes.to_csv(index=False).encode("utf-8-sig")
+
+    st.download_button(
+        "Baixar CSV filtrado",
+        data=csv,
+        file_name="historico_st_fd_filtrado.csv",
+        mime="text/csv"
+    )
