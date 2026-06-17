@@ -112,3 +112,13 @@ st.markdown("""
 <div class="step"><b>3.</b> Acesse a página <b>Dashboard Consolidado</b>.</div>
 <div class="step"><b>4.</b> Escolha o consolidado e acompanhe os indicadores.</div>
 """, unsafe_allow_html=True)
+
+st.divider()
+
+st.subheader("Outros dashboards")
+
+st.page_link(
+    "pages/3_Dashboard_ST_FD.py",
+    label="📈 Abrir Dashboard ST & FD",
+    icon="📈"
+)
