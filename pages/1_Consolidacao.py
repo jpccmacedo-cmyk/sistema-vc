@@ -15,6 +15,7 @@ import unicodedata
 import traceback
 import warnings
 
+from database.consolidados_db import salvar_resultados_consolidados_no_banco
 from utils.historico import salvar_resultados_no_historico
 
 warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
