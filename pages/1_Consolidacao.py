@@ -794,23 +794,16 @@ if botao_processar:
                 data_referencia,
                 copiar_estilos=copiar_estilos
             )
-ids_consolidados = salvar_resultados_consolidados_no_banco(resultados)
 
-for resultado in resultados:
-    resultado["arquivo_excel"].seek(0)
+        ids_consolidados = salvar_resultados_consolidados_no_banco(resultados)
 
-st.success(
-    f"Consolidado(s) salvo(s) no histórico compartilhado. "
-    f"{len(ids_consolidados)} registro(s) criado(s)."
-)
-        # Salva os consolidados no histórico do dashboard
-        salvar_resultados_no_historico(resultados)
-
-        # Reposiciona os arquivos na memória para permitir download
         for resultado in resultados:
             resultado["arquivo_excel"].seek(0)
 
-        st.success("Arquivo(s) final(is) gerado(s) com sucesso e salvo(s) no histórico do dashboard!")
+        st.success(
+            f"Arquivo(s) final(is) gerado(s) com sucesso e salvo(s) no histórico compartilhado. "
+            f"{len(ids_consolidados)} registro(s) criado(s)."
+        )
 
         total_processados = sum(len(r["arquivos_processados"]) for r in resultados)
         total_erros = sum(len(r["arquivos_com_erro"]) for r in resultados)
@@ -842,11 +835,6 @@ st.success(
                 resultado["nome_arquivo_final"],
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-
-        st.info(
-            "Agora você pode abrir a página 'Dashboard Consolidado' "
-            "para visualizar os indicadores extraídos automaticamente."
-        )
 
         st.subheader("5. Resumo")
 
