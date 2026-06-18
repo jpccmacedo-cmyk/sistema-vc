@@ -61,7 +61,7 @@ st.sidebar.info("Use o menu lateral para acessar as páginas.")
 st.markdown("""
 <div class="hero">
     <div class="pill">Portal gerencial</div>
-    <div class="title-main">Sistema de Consolidação e Dashboard</div>
+    <div class="title-main">Sistema Performance Operacional Regional CN</div>
     <div class="subtitle">
         Gere arquivos consolidados, salve o histórico automaticamente e acompanhe os indicadores por planta.
     </div>
