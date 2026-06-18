@@ -1,4 +1,108 @@
-from datetime import datetimefrom datetime import": grupo,
+from datetime import datetime
+import uuid
+import re
+import unicodedata
+
+import pandas as pd
+from sqlalchemy                mes INTEGER NOT NULL,from sqlalchemy import text
+                periodicidade TEXT,
+                nivel TEXT,
+                codigo TEXT,
+                nome TEXT,
+                grupo TEXT,
+                indicador TEXT,
+                meta REAL,
+                sentido TEXT,
+                tipo TEXT,
+                observacao TEXT,
+                data_upload TEXT,
+                usuario_upload TEXT,
+                arquivo_origem TEXT
+            )
+        """))
+
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_metas_consolidados_busca
+            ON metas_consolidados (ano, mes, codigo, grupo, indicador)
+        """))
+
+
+def carregar_tipos_planilha(wb):
+    tipos = {}
+
+    if "TIPOS" not in wb.sheetnames:
+        return tipos
+
+    ws = wb["TIPOS"]
+
+    for row in ws.iter_rows(min_row=3, values_only=True):
+        valores = [v for v in row if v is not None]
+
+        if len(valores) >= 2:
+            indicador = str(valores[0]).strip()
+            tipo_meta = str(valores[1]).strip()
+
+            tipos[normalizar_texto(indicador)] = sentido_from_tipo(tipo_meta)
+
+    return tipos
+
+
+def obter_sentido(grupo, indicador, tipos_lookup):
+    chave = ALIASES_TIPOS.get((grupo, indicador), indicador)
+    chave_norm = normalizar_texto(chave)
+
+    return tipos_lookup.get(chave_norm, "maior")
+
+
+def adicionar_meta_mensal(
+    registros,
+    ws,
+    tipos_lookup,
+    titulo_origem,
+    header_row,
+    first_data_row,
+    last_data_row,
+    label_col,
+    first_month_col,
+    last_month_col,
+    grupo,
+    indicador
+):
+    for linha in range(first_data_row, last_data_row + 1):
+        label = ws.cell(linha, label_col).value
+        planta_info = identificar_planta(label)
+
+        if not planta_info:
+            continue
+
+        nivel, codigo, nome = planta_info
+
+        for coluna in range(first_month_col, last_month_col + 1):
+            data_mes = ws.cell(header_row, coluna).value
+
+            if not isinstance(data_mes, datetime):
+                continue
+
+            valor_original = limpar_valor(ws.cell(linha, coluna).value)
+
+            if valor_original is None:
+                continue
+
+            valor_meta = ajustar_meta(indicador, valor_original)
+
+            observacao = f"Origem: {titulo_origem}"
+
+            if indicador in ["%KKC", "KKC"]:
+                observacao += " | KKC convertido para número sem %. Ex.: 0,55 virou 55."
+
+            registros.append({
+                "ano": data_mes.year,
+                "mes": data_mes.month,
+                "periodicidade": "Mensal",
+                "nivel": nivel,
+                "codigo": codigo,
+                "nome": nome,
+                "grupo": grupo,
                 "indicador": indicador,
                 "meta": valor_meta,
                 "sentido": obter_sentido(grupo, indicador, tipos_lookup),
@@ -92,8 +196,8 @@ def normalizar_planilha_metas(caminho_arquivo):
         "Fornos", "%ST"
     )
 
-    # Segundo bloco de OEE Moagem Cimento existente na planilha.
-    # Será deduplicado pela chave.
+    # Segundo bloco de OEE Moagem Cimento.
+    # Será removido caso gere duplicidade.
     adicionar_meta_mensal(
         registros, ws, tipos_lookup,
         "OEE MOAGEM CIMENTO",
@@ -303,19 +407,13 @@ def excluir_metas_ano(ano):
             text("DELETE FROM metas_consolidados WHERE ano = :ano"),
             {"ano": int(ano)}
         )
-import uuid
-import re
-import unicodedata
-
-import pandas as pd
-from sqlalchemy import text
 from openpyxl import load_workbook
 
 from database.connection import get_engine
 
 
 PLANT_MAP = {
-    "centro-norte": ("Regional", "CN", "Regional CN"),
+    "centro norte": ("Regional", "CN", "Regional CN"),
     "corumba": ("Planta", "COB", "Corumbá"),
     "cuiaba": ("Planta", "CUI", "Cuiabá"),
     "edealina": ("Planta", "EDE", "Edealina"),
@@ -418,8 +516,8 @@ def tipo_indicador(indicador):
 def ajustar_meta(indicador, valor):
     """
     Regra específica do KKC:
-    Se vier 0,55 no Excel, salvar como 55.
-    Ou seja, KKC fica número puro, sem símbolo de %.
+    Se no Excel vier 0,55 representando 55%, salvar como 55.
+    A meta fica número puro, sem símbolo de %.
     """
 
     if indicador in ["%KKC", "KKC"] and valor is not None and abs(valor) <= 1:
@@ -436,99 +534,3 @@ def init_metas_db():
             CREATE TABLE IF NOT EXISTS metas_consolidados (
                 id TEXT PRIMARY KEY,
                 ano INTEGER NOT NULL,
-                mes INTEGER NOT NULL,
-                periodicidade TEXT,
-                nivel TEXT,
-                codigo TEXT,
-                nome TEXT,
-                grupo TEXT,
-                indicador TEXT,
-                meta REAL,
-                sentido TEXT,
-                tipo TEXT,
-                observacao TEXT,
-                data_upload TEXT,
-                usuario_upload TEXT,
-                arquivo_origem TEXT
-            )
-        """))
-
-        conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_metas_consolidados_busca
-            ON metas_consolidados (ano, mes, codigo, grupo, indicador)
-        """))
-
-
-def carregar_tipos_planilha(wb):
-    if "TIPOS" not in wb.sheetnames:
-        return {}
-
-    ws = wb["TIPOS"]
-    tipos = {}
-
-    for row in ws.iter_rows(min_row=3, values_only=True):
-        valores = [v for v in row if v is not None]
-
-        if len(valores) >= 2:
-            indicador = str(valores[0]).strip()
-            tipo_meta = str(valores[1]).strip()
-            tipos[normalizar_texto(indicador)] = sentido_from_tipo(tipo_meta)
-
-    return tipos
-
-
-def obter_sentido(grupo, indicador, tipos_lookup):
-    chave = ALIASES_TIPOS.get((grupo, indicador), indicador)
-    chave_norm = normalizar_texto(chave)
-
-    return tipos_lookup.get(chave_norm, "maior")
-
-
-def adicionar_meta_mensal(
-    registros,
-    ws,
-    tipos_lookup,
-    titulo_origem,
-    header_row,
-    first_data_row,
-    last_data_row,
-    label_col,
-    first_month_col,
-    last_month_col,
-    grupo,
-    indicador
-):
-    for linha in range(first_data_row, last_data_row + 1):
-        label = ws.cell(linha, label_col).value
-        planta_info = identificar_planta(label)
-
-        if not planta_info:
-            continue
-
-        nivel, codigo, nome = planta_info
-
-        for coluna in range(first_month_col, last_month_col + 1):
-            data_mes = ws.cell(header_row, coluna).value
-
-            if not isinstance(data_mes, datetime):
-                continue
-
-            valor_original = limpar_valor(ws.cell(linha, coluna).value)
-
-            if valor_original is None:
-                continue
-
-            valor_meta = ajustar_meta(indicador, valor_original)
-
-            observacao = f"Origem: {titulo_origem}"
-
-            if indicador in ["%KKC", "KKC"]:
-                observacao += " | KKC convertido para número sem %. Ex.: 0,55 virou 55."
-
-            registros.append({
-                "ano": data_mes.year,
-                "mes": data_mes.month,
-                "periodicidade": "Mensal",
-                "nivel": nivel,
-                "codigo": codigo,
-                "nome": nome,
