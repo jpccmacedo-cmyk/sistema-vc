@@ -1,54 +1,41 @@
 from io import BytesIO
-import json
 
 import streamlit as st
 import pandas as pd
-from openpyxl import load_workbook
+"),import matplotlib.pyplot as plt
+    ("NOB", "Nobres"),
+    ("PVE", "Porto Velho"),
+    ("SOB", "Sobradinho"),
+    ("XAM", "Xambioá"),
+    ("CN", "Regional CN"),
+]
 
-from database.consolidados_db import (
-    init_consolidados_db,
-    listar_consolidados,
-    carregar_arquivo_consolidado,
-    excluir_consolidado,
-)
+PLANTAS_STATUS = ["COB", "CUI", "EDE", "NOB", "PVE", "SOB", "XAM"]
 
-from database.metas_db import (
-    init_metas_db,
-    carregar_metas,
-)
+GRUPOS_ORDEM = [
+    "Fornos",
+    "Moagens Cru",
+    "Moagens Cimento",
+    "Ensacadeiras",
+    "Britagens",
+    "Estoques",
+    "Volumes",
+]
 
-from utils.mapa_indicadores import extrair_resultados_consolidado
-
-
-st.set_page_config(
-    page_title="Dashboard Consolidado",
-    page_icon="📊",
-    layout="wide"
-)
-
-init_consolidados_db()
-init_metas_db()
-
-st.title("📊 Dashboard Consolidado com Farol")
-st.caption("Histórico compartilhado dos consolidados, comparação com metas e farol.")
-
-df_consolidados = listar_consolidados()
-df_metas = carregar_metas()
-
-if df_consolidados.empty:
-    st.warning("Nenhum consolidado salvo ainda. Gere um consolidado na página de Consolidação.")
-    st.stop()
-
-if df_metas.empty:
-    st.warning("Nenhuma meta cadastrada ainda. Faça upload da planilha na página Metas.")
-    st.stop()
+INDICADORES_ORDEM = {
+    "Fornos": ["OEE", "FP", "FF", "MTBF", "%ST", "CT"],
+    "Moagens Cru": ["OEE", "FP", "FF", "MTBF"],
+    "Moagens Cimento": ["OEE", "FP", "FF", "MTBF", "%KKC"],
+    "Ensacadeiras": ["OEE"],
+    "Britagens": ["OEE"],
+    "Estoques": ["Clínquer", "Granel", "Ensacado", "Argamassa"],
+    "Volumes": ["Cimento", "Clínquer"],
+}
 
 
-def ajustar_resultado_para_comparacao(indicador, valor):
-    """
-    KKC deve comparar na escala 0–100.
-    Se resultado vier como 0,55, vira 55.
-    """
+def to_float(valor):
+    if valor is None:
+        return None
 
     try:
         if pd.isna(valor):
@@ -56,59 +43,55 @@ def ajustar_resultado_para_comparacao(indicador, valor):
     except Exception:
         pass
 
-    if valor is None:
-        return None
+    if isinstance(valor, (int, float)):
+        return float(valor)
 
-    try:
-        valor = float(valor)
-    except Exception:
-        return None
+    if isinstance(valor, str):
+        texto = valor.strip()
 
-    if indicador in ["%KKC", "KKC"] and abs(valor) <= 1:
-        return valor * 100
+        if texto.upper() in ["", "-", "NA", "N/A", "NÃO TEM", "NAO TEM"]:
+            return None
 
-    return valor
+        texto = texto.replace("%", "").replace(".", "").replace(",", ".")
 
-
-def buscar_meta(row, df_metas_periodo):
-    ano = int(row["ano"])
-    mes = int(row["mes"])
-    codigo = row["planta"]
-    grupo = row["grupo"]
-    indicador = row["indicador"]
-
-    # 1. Busca meta mensal
-    mensal = df_metas_periodo[
-        (df_metas_periodo["ano"] == ano)
-        & (df_metas_periodo["mes"] == mes)
-        & (df_metas_periodo["codigo"] == codigo)
-        & (df_metas_periodo["grupo"] == grupo)
-        & (df_metas_periodo["indicador"] == indicador)
-    ]
-
-    if not mensal.empty:
-        return mensal.iloc[0]
-
-    # 2. Busca meta anual
-    anual = df_metas_periodo[
-        (df_metas_periodo["ano"] == ano)
-        & (df_metas_periodo["mes"] == 0)
-        & (df_metas_periodo["codigo"] == codigo)
-        & (df_metas_periodo["grupo"] == grupo)
-        & (df_metas_periodo["indicador"] == indicador)
-    ]
-
-    if not anual.empty:
-        return anual.iloc[0]
+        try:
+            return float(texto)
+        except Exception:
+            return None
 
     return None
 
 
+def ajustar_resultado(indicador, valor):
+    numero = to_float(valor)
+
+    if numero is None:
+        return None
+
+    # KKC deve ficar na escala 0-100. Ex.: 0,55 vira 55.
+    if indicador in ["%KKC", "KKC"] and abs(numero) <= 1:
+        return numero * 100
+
+    return numero
+
+
+def formatar_numero(valor, tipo=None):
+    numero = to_float(valor)
+
+    if numero is None:
+        return "NA"
+
+    if tipo == "inteiro":
+        return f"{numero:,.0f}".replace(",", ".")
+
+    return f"{numero:.1f}".replace(".", ",")
+
+
 def calcular_status(resultado, meta, sentido):
-    if resultado is None or pd.isna(resultado):
+    if resultado is None:
         return "sem_resultado"
 
-    if meta is None or pd.isna(meta):
+    if meta is None:
         return "sem_meta"
 
     if sentido == "informativo":
@@ -120,118 +103,362 @@ def calcular_status(resultado, meta, sentido):
     return "verde" if resultado >= meta else "vermelho"
 
 
-def cor_farol(status):
+def cor_status(status):
     if status == "verde":
-        return "background-color: #C6EFCE; color: #006100; font-weight: 700"
+        return "background-color: #00B050; color: white; font-weight: 700"
 
     if status == "vermelho":
-        return "background-color: #FFC7CE; color: #9C0006; font-weight: 700"
+        return "background-color: #FF0000; color: white; font-weight: 700"
 
     if status == "informativo":
-        return "background-color: #E2E8F0; color: #334155"
-
-    return "background-color: #FFFFFF"
-
-
-def simbolo_farol(status):
-    if status == "verde":
-        return "🟢"
-
-    if status == "vermelho":
-        return "🔴"
-
-    if status == "informativo":
-        return "⚪"
+        return "background-color: #D9D9D9; color: black; font-weight: 600"
 
     if status == "sem_meta":
-        return "⚫"
+        return "background-color: #F3F4F6; color: #6B7280"
 
-    return ""
+    return "background-color: #CFCFCF; color: black; font-weight: 600"
 
 
-def montar_farol(df_resultados, df_metas, ano, mes):
+def preparar_metas(df_metas):
+    df = df_metas.copy()
+
+    for col in ["ano", "mes"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    df["meta"] = pd.to_numeric(df["meta"], errors="coerce")
+
+    for col in ["codigo", "grupo", "indicador", "sentido", "tipo", "nome"]:
+        if col in df.columns:
+            df[col] = df[col].astype(str)
+
+    return df
+
+
+def buscar_meta(df_metas, ano, mes, codigo, grupo, indicador):
+    if df_metas.empty:
+        return None
+
+    # 1. Meta mensal
+    mensal = df_metas[
+        (df_metas["ano"] == int(ano))
+        & (df_metas["mes"] == int(mes))
+        & (df_metas["codigo"] == codigo)
+        & (df_metas["grupo"] == grupo)
+        & (df_metas["indicador"] == indicador)
+    ]
+
+    if not mensal.empty:
+        return mensal.iloc[0]
+
+    # 2. Meta anual
+    anual = df_metas[
+        (df_metas["ano"] == int(ano))
+        & (df_metas["mes"] == 0)
+        & (df_metas["codigo"] == codigo)
+        & (df_metas["grupo"] == grupo)
+        & (df_metas["indicador"] == indicador)
+    ]
+
+    if not anual.empty:
+        return anual.iloc[0]
+
+    return None
+
+
+def montar_base_farol(df_resultados, df_metas, ano, mes):
     df = df_resultados.copy()
 
-    df["ano"] = int(ano)
-    df["mes"] = int(mes)
-
     df = df.rename(columns={
-        "Planta": "planta",
+        "Planta": "codigo",
         "Grupo": "grupo",
         "Indicador": "indicador",
-        "Celula": "celula",
         "Resultado": "resultado_original",
+        "Celula": "celula",
     })
-
-    df["resultado"] = df.apply(
-        lambda row: ajustar_resultado_para_comparacao(
-            row["indicador"],
-            row["resultado_original"]
-        ),
-        axis=1
-    )
-
-    metas_periodo = df_metas[
-        (df_metas["ano"] == int(ano))
-        & (df_metas["codigo"] != "CN")
-    ].copy()
 
     registros = []
 
     for _, row in df.iterrows():
-        meta_row = buscar_meta(row, metas_periodo)
+        codigo = row["codigo"]
+        grupo = row["grupo"]
+        indicador = row["indicador"]
+
+        resultado = ajustar_resultado(
+            indicador,
+            row.get("resultado_original")
+        )
+
+        meta_row = buscar_meta(
+            df_metas,
+            ano,
+            mes,
+            codigo,
+            grupo,
+            indicador
+        )
 
         if meta_row is None:
             meta = None
             sentido = None
             tipo = None
-            nome = None
+            nome = dict(PLANTAS_ORDEM).get(codigo, codigo)
             periodicidade = None
         else:
-            meta = meta_row["meta"]
-            sentido = meta_row["sentido"]
-            tipo = meta_row["tipo"]
-            nome = meta_row["nome"]
-            periodicidade = meta_row["periodicidade"]
+            meta = to_float(meta_row.get("meta"))
+            sentido = meta_row.get("sentido")
+            tipo = meta_row.get("tipo")
+            nome = meta_row.get("nome")
+            periodicidade = meta_row.get("periodicidade")
 
-        status = calcular_status(row["resultado"], meta, sentido)
+        status = calcular_status(resultado, meta, sentido)
 
         registros.append({
-            "Ano": row["ano"],
-            "Mes": row["mes"],
-            "Planta": row["planta"],
+            "Ano": int(ano),
+            "Mes": int(mes),
+            "Codigo": codigo,
             "Nome": nome,
-            "Grupo": row["grupo"],
-            "Indicador": row["indicador"],
-            "Resultado": row["resultado"],
+            "Grupo": grupo,
+            "Indicador": indicador,
+            "Resultado": resultado,
             "Meta": meta,
             "Sentido": sentido,
+            "Tipo": tipo,
             "Periodicidade": periodicidade,
             "Status": status,
-            "Farol": simbolo_farol(status),
         })
 
     return pd.DataFrame(registros)
 
 
-def estilizar_farol(df):
+def pares_grupo_indicador(df_farol, df_metas, ano, mes):
+    pares = set()
+
+    for _, row in df_farol.iterrows():
+        pares.add((row["Grupo"], row["Indicador"]))
+
+    # Incluir metas CN no farol, mesmo sem MTD CN.
+    metas_cn = df_metas[
+        (df_metas["ano"] == int(ano))
+        & (df_metas["codigo"] == "CN")
+        & (df_metas["mes"].isin([0, int(mes)]))
+    ]
+
+    for _, row in metas_cn.iterrows():
+        pares.add((row["grupo"], row["indicador"]))
+
+    def chave_ordem(par):
+        grupo, indicador = par
+        grupo_idx = GRUPOS_ORDEM.index(grupo) if grupo in GRUPOS_ORDEM else 99
+        lista_ind = INDICADORES_ORDEM.get(grupo, [])
+        ind_idx = lista_ind.index(indicador) if indicador in lista_ind else 99
+        return grupo_idx, ind_idx, grupo, indicador
+
+    return sorted(pares, key=chave_ordem)
+
+
+def montar_tabela_farol(df_farol, df_metas, ano, mes):
+    pares = pares_grupo_indicador(df_farol, df_metas, ano, mes)
+
+    linhas = []
+    status_celulas = {}
+    grupo_anterior = None
+
+    for idx, (grupo, indicador) in enumerate(pares):
+        linha = {
+            ("", "Grupo"): grupo if grupo != grupo_anterior else "",
+            ("", "Indicador"): indicador,
+        }
+
+        grupo_anterior = grupo
+
+        for codigo, nome_planta in PLANTAS_ORDEM:
+            meta_row = buscar_meta(
+                df_metas,
+                ano,
+                mes,
+                codigo,
+                grupo,
+                indicador
+            )
+
+            if meta_row is None:
+                meta = None
+                tipo = None
+            else:
+                meta = to_float(meta_row.get("meta"))
+                tipo = meta_row.get("tipo")
+
+            if codigo == "CN":
+                resultado = None
+                status = "sem_resultado"
+            else:
+                resultado_row = df_farol[
+                    (df_farol["Codigo"] == codigo)
+                    & (df_farol["Grupo"] == grupo)
+                    & (df_farol["Indicador"] == indicador)
+                ]
+
+                if resultado_row.empty:
+                    resultado = None
+                    status = "sem_resultado"
+                else:
+                    resultado = resultado_row.iloc[0]["Resultado"]
+                    status = resultado_row.iloc[0]["Status"]
+                    tipo = resultado_row.iloc[0].get("Tipo", tipo)
+
+            linha[(nome_planta, "Meta")] = formatar_numero(meta, tipo)
+            linha[(nome_planta, "MTD")] = formatar_numero(resultado, tipo)
+            status_celulas[(idx, nome_planta)] = status
+
+        linhas.append(linha)
+
+    df_tabela = pd.DataFrame(linhas)
+    df_tabela.columns = pd.MultiIndex.from_tuples(df_tabela.columns)
+
+    return df_tabela, status_celulas
+
+
+def estilizar_tabela_farol(df_tabela, status_celulas):
     def aplicar(row):
         estilos = []
 
-        for col in df.columns:
-            if col in ["Status", "Farol", "Resultado", "Meta"]:
-                estilos.append(cor_farol(row["Status"]))
+        for col in df_tabela.columns:
+            if col[1] == "MTD":
+                status = status_celulas.get(
+                    (row.name, col[0]),
+                    "sem_resultado"
+                )
+                estilos.append(cor_status(status))
+            elif col[1] == "Meta":
+                estilos.append("background-color: #FFFFFF; color: black")
+            elif col[1] == "Grupo":
+                estilos.append("background-color: #BFBFBF; color: black; font-weight: 700")
+            elif col[1] == "Indicador":
+                estilos.append("background-color: #F8F8F8; color: black; font-weight: 600")
             else:
                 estilos.append("")
 
         return estilos
 
-    return df.style.apply(aplicar, axis=1)
+    return df_tabela.style.apply(aplicar, axis=1)
+
+
+def calcular_status_por_planta(df_farol):
+    df = df_farol[
+        df_farol["Codigo"].isin(PLANTAS_STATUS)
+        & df_farol["Status"].isin(["verde", "vermelho"])
+    ].copy()
+
+    if df.empty:
+        return pd.DataFrame()
+
+    resumo = (
+        df.groupby(["Codigo", "Status"])
+        .size()
+        .unstack(fill_value=0)
+        .reset_index()
+    )
+
+    if "verde" not in resumo.columns:
+        resumo["verde"] = 0
+
+    if "vermelho" not in resumo.columns:
+        resumo["vermelho"] = 0
+
+    resumo["total"] = resumo["verde"] + resumo["vermelho"]
+    resumo["Acima Meta MTD"] = resumo["verde"] / resumo["total"] * 100
+    resumo["Abaixo Meta MTD"] = resumo["vermelho"] / resumo["total"] * 100
+    resumo["Nome"] = resumo["Codigo"].map(dict(PLANTAS_ORDEM))
+    resumo = resumo.sort_values("Acima Meta MTD", ascending=True)
+
+    return resumo
+
+
+def plot_status_mtd(df_status):
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    y = range(len(df_status))
+    acima = df_status["Acima Meta MTD"]
+    abaixo = df_status["Abaixo Meta MTD"]
+    labels = df_status["Codigo"]
+
+    ax.barh(y, acima, color="#109618", label="Acima Meta MTD")
+    ax.barh(y, abaixo, left=acima, color="#D64550", label="Abaixo Meta MTD")
+
+    for i, (a, b) in enumerate(zip(acima, abaixo)):
+        if a > 5:
+            ax.text(
+                a / 2,
+                i,
+                f"{a:.2f}%".replace(".", ","),
+                va="center",
+                ha="center",
+                color="white",
+                fontsize=9
+            )
+
+        if b > 5:
+            ax.text(
+                a + b / 2,
+                i,
+                f"{b:.2f}%".replace(".", ","),
+                va="center",
+                ha="center",
+                color="white",
+                fontsize=9
+            )
+
+    ax.set_yticks(list(y))
+    ax.set_yticklabels(labels)
+    ax.set_xlim(0, 100)
+    ax.set_xlabel("")
+    ax.set_title(
+        "Status Indicador (MTD)",
+        fontsize=14,
+        fontweight="bold",
+        color="#1A2A8F"
+    )
+    ax.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.08),
+        ncol=2,
+        frameon=False
+    )
+
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["bottom"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+    ax.tick_params(axis="x", bottom=False, labelbottom=False)
+
+    return fig
 
 
 # ==============================
-# Filtros do consolidado
+# App
 # ==============================
+
+init_consolidados_db()
+init_metas_db()
+
+st.title("📊 Dashboard Consolidado com Farol")
+st.caption("Farol mensal por planta, status MTD e histórico compartilhado.")
+
+try:
+    df_consolidados = listar_consolidados()
+    df_metas = preparar_metas(carregar_metas())
+except Exception as e:
+    st.error("Erro ao carregar dados do banco.")
+    st.exception(e)
+    st.stop()
+
+if df_consolidados.empty:
+    st.warning("Nenhum consolidado salvo ainda. Gere um consolidado na página de Consolidação.")
+    st.stop()
+
+if df_metas.empty:
+    st.warning("Nenhuma meta cadastrada ainda. Faça upload da planilha na página Metas.")
+    st.stop()
 
 st.sidebar.header("🔎 Filtros")
 
@@ -275,23 +502,33 @@ if not arquivo_bytes:
     st.error("Arquivo consolidado não encontrado no banco.")
     st.stop()
 
-wb = load_workbook(BytesIO(arquivo_bytes), data_only=True)
-df_resultados = extrair_resultados_consolidado(wb)
+try:
+    wb = load_workbook(BytesIO(arquivo_bytes), data_only=True)
+    df_resultados = extrair_resultados_consolidado(wb)
+except Exception as e:
+    st.error("Erro ao extrair indicadores do consolidado.")
+    st.exception(e)
+    st.stop()
 
 if df_resultados.empty:
     st.warning("Nenhum indicador extraído do consolidado.")
     st.stop()
 
-df_farol = montar_farol(
-    df_resultados=df_resultados,
-    df_metas=df_metas,
-    ano=int(ano_sel),
-    mes=int(mes_sel)
+df_farol = montar_base_farol(
+    df_resultados,
+    df_metas,
+    int(ano_sel),
+    int(mes_sel)
 )
 
-# ==============================
-# Resumo
-# ==============================
+df_tabela_farol, status_celulas = montar_tabela_farol(
+    df_farol,
+    df_metas,
+    int(ano_sel),
+    int(mes_sel)
+)
+
+df_status = calcular_status_por_planta(df_farol)
 
 st.subheader("📌 Resumo")
 
@@ -300,7 +537,10 @@ col1, col2, col3, col4 = st.columns(4)
 col1.metric("Arquivo", nome_arquivo)
 col2.metric("Ano", int(ano_sel))
 col3.metric("Mês", int(mes_sel))
-col4.metric("Indicadores com meta", int(df_farol["Meta"].notna().sum()))
+col4.metric(
+    "Indicadores avaliados",
+    int(df_farol["Status"].isin(["verde", "vermelho"]).sum())
+)
 
 st.download_button(
     "⬇️ Baixar arquivo consolidado",
@@ -311,126 +551,129 @@ st.download_button(
 
 st.divider()
 
-# ==============================
-# Filtros internos
-# ==============================
+tab_farol, tab_status, tab_detalhes, tab_historico, tab_admin = st.tabs([
+    "🚦 Farol Mensal",
+    "📊 Status Indicador MTD",
+    "🔍 Detalhes",
+    "📚 Histórico",
+    "⚙️ Administração",
+])
 
-plantas = sorted(df_farol["Planta"].dropna().unique())
-grupos = sorted(df_farol["Grupo"].dropna().unique())
-indicadores = sorted(df_farol["Indicador"].dropna().unique())
-
-colf1, colf2, colf3 = st.columns(3)
-
-with colf1:
-    filtro_plantas = st.multiselect("Plantas", plantas, default=plantas)
-
-with colf2:
-    filtro_grupos = st.multiselect("Grupos", grupos, default=grupos)
-
-with colf3:
-    filtro_indicadores = st.multiselect("Indicadores", indicadores, default=indicadores)
-
-df_view = df_farol[
-    df_farol["Planta"].isin(filtro_plantas)
-    & df_farol["Grupo"].isin(filtro_grupos)
-    & df_farol["Indicador"].isin(filtro_indicadores)
-].copy()
-
-# ==============================
-# Farol
-# ==============================
-
-st.subheader("🚦 Farol dos Indicadores")
-
-st.markdown("""
-<div style="display:flex;gap:20px;margin:8px 0 16px 0;font-size:13px;">
-  <div>🟢 Dentro da meta</div>
-  <div>🔴 Fora da meta</div>
-  <div>⚪ Informativo</div>
-  <div>⚫ Sem meta</div>
-</div>
-""", unsafe_allow_html=True)
-
-st.dataframe(
-    estilizar_farol(df_view),
-    use_container_width=True,
-    hide_index=True
-)
-
-csv = df_view.to_csv(index=False).encode("utf-8-sig")
-
-st.download_button(
-    "⬇️ Baixar farol em CSV",
-    data=csv,
-    file_name="farol_consolidado.csv",
-    mime="text/csv"
-)
-
-st.divider()
-
-# ==============================
-# Gráficos
-# ==============================
-
-st.subheader("📈 Gráficos")
-
-df_num = df_view.dropna(subset=["Resultado"]).copy()
-
-if df_num.empty:
-    st.info("Não há dados numéricos suficientes para gráfico.")
-else:
-    colg1, colg2 = st.columns(2)
-
-    with colg1:
-        indicador_grafico = st.selectbox(
-            "Indicador do gráfico",
-            sorted(df_num["Indicador"].unique())
-        )
-
-    with colg2:
-        grupo_grafico = st.selectbox(
-            "Grupo do gráfico",
-            sorted(df_num[df_num["Indicador"] == indicador_grafico]["Grupo"].unique())
-        )
-
-    df_grafico = df_num[
-        (df_num["Indicador"] == indicador_grafico)
-        & (df_num["Grupo"] == grupo_grafico)
-    ].copy()
-
-    tabela_grafico = df_grafico.pivot_table(
-        index="Planta",
-        values=["Resultado", "Meta"],
-        aggfunc="first"
+with tab_farol:
+    st.subheader(f"Farol de Indicadores Mensais CN - {int(mes_sel):02d}/{int(ano_sel)}")
+    st.caption(
+        "Regional CN exibe Meta quando cadastrada, "
+        "mas MTD CN permanece NA e não entra no cálculo de status."
     )
 
-    st.bar_chart(tabela_grafico)
+    st.dataframe(
+        estilizar_tabela_farol(df_tabela_farol, status_celulas),
+        use_container_width=True,
+        hide_index=True
+    )
 
-st.divider()
+with tab_status:
+    st.subheader("Status Indicador (MTD)")
+    st.caption(
+        "CN não é calculado neste gráfico. "
+        "O status considera apenas COB, CUI, EDE, NOB, PVE, SOB e XAM."
+    )
 
-# ==============================
-# Histórico salvo
-# ==============================
+    if df_status.empty:
+        st.info("Não há indicadores suficientes com meta e resultado para montar o status MTD.")
+    else:
+        fig = plot_status_mtd(df_status)
+        st.pyplot(fig, use_container_width=False)
+        st.dataframe(df_status, use_container_width=True, hide_index=True)
 
-st.subheader("📚 Histórico de consolidados")
+with tab_detalhes:
+    st.subheader("Base detalhada do farol")
 
-st.dataframe(
-    df_consolidados[
-        ["nome_arquivo", "data_processada", "ano", "mes", "data_geracao"]
-    ],
-    use_container_width=True
+    plantas = sorted(df_farol["Codigo"].dropna().unique())
+    grupos = sorted(df_farol["Grupo"].dropna().unique())
+    indicadores = sorted(df_farol["Indicador"].dropna().unique())
+
+    c1, c2, c3 = st.columns(3)
+
+    with c1:
+        f_plantas = st.multiselect(
+            "Plantas",
+            plantas,
+            default=plantas
+        )
+
+    with c2:
+        f_grupos = st.multiselect(
+            "Grupos",
+            grupos,
+            default=grupos
+        )
+
+    with c3:
+        f_ind = st.multiselect(
+            "Indicadores",
+            indicadores,
+            default=indicadores
+        )
+
+    df_view = df_farol[
+        df_farol["Codigo"].isin(f_plantas)
+        & df_farol["Grupo"].isin(f_grupos)
+        & df_farol["Indicador"].isin(f_ind)
+    ].copy()
+
+    st.dataframe(df_view, use_container_width=True, hide_index=True)
+
+    csv = df_view.to_csv(index=False).encode("utf-8-sig")
+
+    st.download_button(
+        "⬇️ Baixar detalhes em CSV",
+        data=csv,
+        file_name="farol_consolidado_detalhado.csv",
+        mime="text/csv"
+    )
+
+with tab_historico:
+    st.subheader("Histórico de consolidados")
+
+    cols = ["nome_arquivo", "data_processada", "ano", "mes", "data_geracao"]
+    cols = [c for c in cols if c in df_consolidados.columns]
+
+    st.dataframe(
+        df_consolidados[cols],
+        use_container_width=True,
+        hide_index=True
+    )
+
+with tab_admin:
+    st.subheader("Administração")
+
+    with st.expander("Excluir consolidado selecionado"):
+        st.warning("Essa ação remove o consolidado do histórico compartilhado.")
+
+        if st.button("Excluir consolidado selecionado"):
+            excluir_consolidado(consolidado_id)
+            st.success("Consolidado excluído.")
+            st.rerun()
+from openpyxl import load_workbook
+
+from database.consolidados_db import (
+    init_consolidados_db,
+    listar_consolidados,
+    carregar_arquivo_consolidado,
+    excluir_consolidado,
+)
+from database.metas_db import init_metas_db, carregar_metas
+from utils.mapa_indicadores import extrair_resultados_consolidado
+
+
+st.set_page_config(
+    page_title="Dashboard Consolidado",
+    page_icon="📊",
+    layout="wide"
 )
 
-st.divider()
 
-# ==============================
-# Administração
-# ==============================
-
-with st.expander("⚙️ Excluir consolidado selecionado"):
-    st.warning("Essa ação remove o consolidado do histórico compartilhado.")
-
-    if st.button("Excluir consolidado selecionado"):
-        excluir_consolidado(consolidado_id)
-        st.success("Consolidado excluído.")
-        st.rerun()
+PLANTAS_ORDEM = [
+    ("COB", "Corumbá"),
+    ("CUI", "Cuiabá"),
