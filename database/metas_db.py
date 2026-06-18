@@ -4,7 +4,129 @@ import re
 import unicodedata
 
 import pandas as pd
-from sqlalchemy                mes INTEGER NOT NULL,from sqlalchemy import text
+from sqlalchemy import text
+from openpyxl import load_workbook
+
+from database.connection import get_engine
+
+
+PLANT_MAP = {
+    "centro norte": ("Regional", "CN", "Regional CN"),
+    "corumba": ("Planta", "COB", "Corumbá"),
+    "cuiaba": ("Planta", "CUI", "Cuiabá"),
+    "edealina": ("Planta", "EDE", "Edealina"),
+    "nobres": ("Planta", "NOB", "Nobres"),
+    "porto velho": ("Planta", "PVE", "Porto Velho"),
+    "sobradinho": ("Planta", "SOB", "Sobradinho"),
+    "xambioa": ("Planta", "XAM", "Xambioá"),
+}
+
+
+ALIASES_TIPOS = {
+    ("Fornos", "OEE"): "oee fornos",
+    ("Fornos", "%ST"): "st",
+    ("Fornos", "FP"): "fp fornos",
+    ("Fornos", "FF"): "ff fornos",
+    ("Fornos", "MTBF"): "mtbf fornos",
+
+    ("Moagens Cimento", "OEE"): "oee moagem cimento",
+    ("Moagens Cimento", "%KKC"): "kkc",
+    ("Moagens Cimento", "KKC"): "kkc",
+    ("Moagens Cimento", "FP"): "fp moagem cimento",
+    ("Moagens Cimento", "FF"): "ff moagem cimento",
+    ("Moagens Cimento", "MTBF"): "mtbf moagem cimento",
+
+    ("Moagens Cru", "OEE"): "oee moagens cru",
+    ("Moagens Cru", "FP"): "fp moagens cru",
+    ("Moagens Cru", "FF"): "ff moagens cru",
+    ("Moagens Cru", "MTBF"): "mtbf moagens cru",
+
+    ("Ensacadeiras", "OEE"): "oee ensacadeira",
+    ("Britagens", "OEE"): "oee britagem",
+}
+
+
+def normalizar_texto(valor):
+    texto = "" if valor is None else str(valor)
+    texto = unicodedata.normalize("NFKD", texto)
+    texto = texto.encode("ASCII", "ignore").decode("ASCII")
+    texto = texto.lower().strip()
+    texto = texto.replace("\n", " ")
+    texto = re.sub(r"[-_]+", " ", texto)
+    texto = re.sub(r"\btotal\b", "", texto)
+    texto = re.sub(r"\s+", " ", texto).strip()
+    return texto
+
+
+def identificar_planta(label):
+    chave = normalizar_texto(label)
+
+    for inicio, dados in PLANT_MAP.items():
+        if chave.startswith(inicio):
+            return dados
+
+    return None
+
+
+def limpar_valor(valor):
+    if valor is None:
+        return None
+
+    if isinstance(valor, str):
+        texto = valor.strip().upper()
+
+        if texto in ["", "-", "NA", "N/A"]:
+            return None
+
+        try:
+            return float(texto.replace(",", "."))
+        except Exception:
+            return None
+
+    try:
+        return float(valor)
+    except Exception:
+        return None
+
+
+def sentido_from_tipo(tipo):
+    texto = normalizar_texto(tipo)
+
+    if "menor" in texto:
+        return "menor"
+
+    if "maior" in texto:
+        return "maior"
+
+    return "informativo"
+
+
+def tipo_indicador(indicador):
+    if indicador in ["%KKC", "KKC"]:
+        return "numero"
+
+    if indicador in ["Clínquer", "Granel", "Ensacado", "Argamassa", "Cimento"]:
+        return "inteiro"
+
+    return "numero"
+
+
+def ajustar_meta(indicador, valor):
+    if indicador in ["%KKC", "KKC"] and valor is not None and abs(valor) <= 1:
+        return valor * 100
+
+    return valor
+
+
+def init_metas_db():
+    engine = get_engine()
+
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS metas_consolidados (
+                id TEXT PRIMARY KEY,
+                ano INTEGER NOT NULL,
+                mes INTEGER NOT NULL,
                 periodicidade TEXT,
                 nivel TEXT,
                 codigo TEXT,
@@ -49,9 +171,7 @@ def carregar_tipos_planilha(wb):
 
 def obter_sentido(grupo, indicador, tipos_lookup):
     chave = ALIASES_TIPOS.get((grupo, indicador), indicador)
-    chave_norm = normalizar_texto(chave)
-
-    return tipos_lookup.get(chave_norm, "maior")
+    return tipos_lookup.get(normalizar_texto(chave), "maior")
 
 
 def adicionar_meta_mensal(
@@ -69,8 +189,7 @@ def adicionar_meta_mensal(
     indicador
 ):
     for linha in range(first_data_row, last_data_row + 1):
-        label = ws.cell(linha, label_col).value
-        planta_info = identificar_planta(label)
+        planta_info = identificar_planta(ws.cell(linha, label_col).value)
 
         if not planta_info:
             continue
@@ -125,8 +244,7 @@ def adicionar_meta_anual(
     ano=2026
 ):
     for linha in range(row_start, row_end + 1):
-        label = ws.cell(linha, label_col).value
-        planta_info = identificar_planta(label)
+        planta_info = identificar_planta(ws.cell(linha, label_col).value)
 
         if not planta_info:
             continue
@@ -164,10 +282,8 @@ def normalizar_planilha_metas(caminho_arquivo):
 
     ws = wb["METAS 2026"]
     tipos_lookup = carregar_tipos_planilha(wb)
-
     registros = []
 
-    # Metas mensais
     adicionar_meta_mensal(
         registros, ws, tipos_lookup,
         "OEE - Fornos",
@@ -196,8 +312,6 @@ def normalizar_planilha_metas(caminho_arquivo):
         "Fornos", "%ST"
     )
 
-    # Segundo bloco de OEE Moagem Cimento.
-    # Será removido caso gere duplicidade.
     adicionar_meta_mensal(
         registros, ws, tipos_lookup,
         "OEE MOAGEM CIMENTO",
@@ -205,7 +319,6 @@ def normalizar_planilha_metas(caminho_arquivo):
         "Moagens Cimento", "OEE"
     )
 
-    # Metas anuais
     adicionar_meta_anual(
         registros, ws, tipos_lookup,
         "FP Fornos",
@@ -407,130 +520,3 @@ def excluir_metas_ano(ano):
             text("DELETE FROM metas_consolidados WHERE ano = :ano"),
             {"ano": int(ano)}
         )
-from openpyxl import load_workbook
-
-from database.connection import get_engine
-
-
-PLANT_MAP = {
-    "centro norte": ("Regional", "CN", "Regional CN"),
-    "corumba": ("Planta", "COB", "Corumbá"),
-    "cuiaba": ("Planta", "CUI", "Cuiabá"),
-    "edealina": ("Planta", "EDE", "Edealina"),
-    "nobres": ("Planta", "NOB", "Nobres"),
-    "porto velho": ("Planta", "PVE", "Porto Velho"),
-    "sobradinho": ("Planta", "SOB", "Sobradinho"),
-    "xambioa": ("Planta", "XAM", "Xambioá"),
-}
-
-
-ALIASES_TIPOS = {
-    ("Fornos", "OEE"): "oee fornos",
-    ("Fornos", "%ST"): "st",
-    ("Fornos", "FP"): "fp fornos",
-    ("Fornos", "FF"): "ff fornos",
-    ("Fornos", "MTBF"): "mtbf fornos",
-
-    ("Moagens Cimento", "OEE"): "oee moagem cimento",
-    ("Moagens Cimento", "%KKC"): "kkc",
-    ("Moagens Cimento", "KKC"): "kkc",
-    ("Moagens Cimento", "FP"): "fp moagem cimento",
-    ("Moagens Cimento", "FF"): "ff moagem cimento",
-    ("Moagens Cimento", "MTBF"): "mtbf moagem cimento",
-
-    ("Moagens Cru", "OEE"): "oee moagens cru",
-    ("Moagens Cru", "FP"): "fp moagens cru",
-    ("Moagens Cru", "FF"): "ff moagens cru",
-    ("Moagens Cru", "MTBF"): "mtbf moagens cru",
-
-    ("Ensacadeiras", "OEE"): "oee ensacadeira",
-    ("Britagens", "OEE"): "oee britagem",
-}
-
-
-def normalizar_texto(valor):
-    texto = "" if valor is None else str(valor)
-    texto = unicodedata.normalize("NFKD", texto)
-    texto = texto.encode("ASCII", "ignore").decode("ASCII")
-    texto = texto.lower().strip()
-    texto = texto.replace("\n", " ")
-    texto = re.sub(r"[-_]+", " ", texto)
-    texto = re.sub(r"\btotal\b", "", texto)
-    texto = re.sub(r"\s+", " ", texto).strip()
-    return texto
-
-
-def identificar_planta(label):
-    chave = normalizar_texto(label)
-
-    for inicio, dados in PLANT_MAP.items():
-        if chave.startswith(inicio):
-            return dados
-
-    return None
-
-
-def limpar_valor(valor):
-    if valor is None:
-        return None
-
-    if isinstance(valor, str):
-        texto = valor.strip().upper()
-
-        if texto in ["", "-", "NA", "N/A"]:
-            return None
-
-        try:
-            return float(texto.replace(",", "."))
-        except Exception:
-            return None
-
-    try:
-        return float(valor)
-    except Exception:
-        return None
-
-
-def sentido_from_tipo(tipo):
-    texto = normalizar_texto(tipo)
-
-    if "menor" in texto:
-        return "menor"
-
-    if "maior" in texto:
-        return "maior"
-
-    return "informativo"
-
-
-def tipo_indicador(indicador):
-    if indicador in ["%KKC", "KKC"]:
-        return "numero"
-
-    if indicador in ["Clínquer", "Granel", "Ensacado", "Argamassa", "Cimento"]:
-        return "inteiro"
-
-    return "numero"
-
-
-def ajustar_meta(indicador, valor):
-    """
-    Regra específica do KKC:
-    Se no Excel vier 0,55 representando 55%, salvar como 55.
-    A meta fica número puro, sem símbolo de %.
-    """
-
-    if indicador in ["%KKC", "KKC"] and valor is not None and abs(valor) <= 1:
-        return valor * 100
-
-    return valor
-
-
-def init_metas_db():
-    engine = get_engine()
-
-    with engine.begin() as conn:
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS metas_consolidados (
-                id TEXT PRIMARY KEY,
-                ano INTEGER NOT NULL,
