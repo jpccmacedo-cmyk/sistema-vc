@@ -92,7 +92,20 @@ def formatar_numero(valor, tipo=None):
     if tipo == "inteiro":
         return f"{numero:,.0f}".replace(",", ".")
     return f"{numero:.1f}".replace(".", ",")
+    
+def formatar_data_farol(consolidado, ano, mes):
+    try:
+        data_processada = consolidado.get("data_processada")
 
+        if data_processada is not None:
+            data = pd.to_datetime(data_processada, errors="coerce")
+
+            if pd.notna(data):
+                return data.strftime("%d/%m/%Y")
+    except Exception:
+        pass
+
+    return
 
 def calcular_status(resultado, meta, sentido):
     if resultado is None:
