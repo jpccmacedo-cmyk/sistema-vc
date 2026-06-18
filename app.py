@@ -122,3 +122,8 @@ st.page_link(
     label="📈 Abrir Dashboard ST & FD",
     icon="📈"
 )
+st.page_link(
+    "pages/4_Metas.py",
+    label="Abrir Cadastro de Metas",
+    icon="🎯"
+)
