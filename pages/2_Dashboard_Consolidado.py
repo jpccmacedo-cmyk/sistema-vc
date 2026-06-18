@@ -583,7 +583,7 @@ def plot_status_mtd(df_status):
 init_consolidados_db()
 init_metas_db()
 
-st.title("Dashboard Consolidado com Farol")
+st.title("Dashboard Consolidado")
 st.caption("Farol mensal por planta, status MTD e historico compartilhado.")
 
 try:
