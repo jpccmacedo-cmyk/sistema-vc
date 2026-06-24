@@ -665,10 +665,10 @@ col4.metric("Plantas", df_mes["planta"].nunique())
 
 st.divider()
 
-tab_st, tab_fd, tab_uploads, tab_base = st.tabs(["ST Heatmap", "FD Multiflex", "Histórico de uploads", "Base filtrada"])
+tab_st, tab_fd, tab_uploads, tab_base = st.tabs(["ST", "FD Multiflex", "Histórico de uploads", "Base filtrada"])
 
 with tab_st:
-    st.subheader("ST Heatmap - " + data_titulo)
+    st.subheader("ST - " + data_titulo)
     tabela_st = montar_tabela_st(df_mes, ano_sel, mes_sel)
     if tabela_st.empty:
         st.info("Nenhum dado ST para os filtros selecionados.")
