@@ -4,7 +4,7 @@ import streamlit as st
 
 
 st.set_page_config(
-    page_title="Sistema CN | Votorantim Cimentos",
+    page_title="Sistema Performance Operacional Regional Centro Norte | Votorantim Cimentos",
     page_icon=":bar_chart:",
     layout="wide",
     initial_sidebar_state="collapsed"
