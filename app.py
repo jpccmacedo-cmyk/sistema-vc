@@ -33,8 +33,8 @@ def menu_link(path, label):
 
 
 render_header(
-    titulo="Sistema CN",
-    subtitulo="Performance Industrial | Regional Centro-Norte"
+    titulo="Sistema Regional CN",
+    subtitulo="Performance Operacional | Regional Centro-Norte"
 )
 
 
