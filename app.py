@@ -180,7 +180,7 @@ st.markdown(
             <img src="{logo_src()}" alt="Votorantim Cimentos">
             <div class="vc-title">
                 <h1>Sistema Regional CN</h1>
-                <p>Performance Operacioanl | Regional Centro-Norte</p>
+                <p>Performance Operacioanal | Regional Centro-Norte</p>
             </div>
         </div>
     </div>
