@@ -201,7 +201,7 @@ with st.container():
         unsafe_allow_html=True
     )
 
-    menu_link("pages/1_Consolidacao.py", "Consolidacao")
+    menu_link("pages/1_Consolidacao.py", "Consolidação")
     menu_link("pages/2_Dashboard_Consolidado.py", "Dashboard Consolidado")
     menu_link("pages/3_Dashboard_ST_FD.py", "Dashboard ST & FD")
     menu_link("pages/4_Metas.py", "Metas")
